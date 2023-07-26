@@ -1,0 +1,2 @@
+def build(ctx):
+    ctx.Run("go", "build", ".")
