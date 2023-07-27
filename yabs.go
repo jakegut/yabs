@@ -1,8 +1,9 @@
-package main
+package yabs
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
+
+	"golang.org/x/exp/slices"
 )
 
 type RunConfig struct {
@@ -127,20 +132,6 @@ func checksumFile(loc string) string {
 	return hex.EncodeToString(sum)
 }
 
-// func isDir(loc string) bool {
-// 	f, err := os.Open(loc)
-// 	if errors.Is(err, os.ErrNotExist) {
-// 		return true
-// 	}
-// 	if err != nil {
-// 		log.Fatalf("open dir: %s", err)
-// 	}
-// 	defer f.Close()
-
-// 	_, err = f.Readdirnames(1)
-// 	return err == io.EOF
-// }
-
 func checksumDir(loc string) string {
 
 	hsh := sha256.New()
@@ -193,8 +184,8 @@ func NewBuildCtx() BuildCtx {
 }
 
 type TaskRecord struct {
+	Name     string
 	Checksum string
-	Time     uint64
 }
 
 type Task struct {
@@ -203,6 +194,9 @@ type Task struct {
 	Dep      []string
 	Out      string
 	Checksum string
+	Dirty    bool
+	mu       sync.Mutex
+	chQueue  []chan *Task
 }
 
 type OutType int
@@ -213,8 +207,12 @@ const (
 	Dir
 )
 
+func getCacheLoc(checksum string) string {
+	return filepath.Join(tmpDir, "cache", checksum[:2], checksum[2:])
+}
+
 func (t *Task) cache(outType OutType) {
-	loc := filepath.Join(tmpDir, "cache", t.Checksum[:2], t.Checksum[2:])
+	loc := getCacheLoc(t.Checksum)
 	if err := os.MkdirAll(filepath.Dir(loc), 0770); err != nil {
 		if !errors.Is(err, os.ErrExist) {
 			log.Fatalf("creating parent dir: %s", err)
@@ -244,86 +242,141 @@ func (t *Task) cache(outType OutType) {
 func (t *Task) checksumEntries(ctx BuildCtx) {
 	outType := None
 	fd, err := os.Stat(t.Out)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return
-		}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Fatalf("stat tmp out: %s", err)
+	} else if fd != nil {
+		if fd.IsDir() {
+			f, err := os.Open(t.Out)
+			if err != nil {
+				log.Fatalf("open dir: %s", err)
+			}
+			defer f.Close()
+
+			_, err = f.Readdirnames(1)
+			if err == io.EOF {
+				outType = None
+			} else {
+				outType = Dir
+			}
+		} else {
+			if fd.Size() == 0 {
+				outType = None
+			} else {
+				outType = File
+			}
+		}
 	}
 
-	if fd.IsDir() {
-		f, err := os.Open(t.Out)
-		if err != nil {
-			log.Fatalf("open dir: %s", err)
-		}
-		defer f.Close()
-
-		_, err = f.Readdirnames(1)
-		if err == io.EOF {
-			return
-		}
-		outType = Dir
-	} else {
-		if fd.Size() == 0 {
-			return
-		}
-		outType = File
-	}
+	checksum := ""
 
 	switch outType {
 	case File:
-		t.Checksum = checksumFile(t.Out)
+		checksum = checksumFile(t.Out)
 	case Dir:
-		t.Checksum = checksumDir(t.Out)
+		checksum = checksumDir(t.Out)
 	case None:
+		t.Out = ""
 		return
 	}
 
+	if checksum == t.Checksum {
+		t.Dirty = false
+		return
+	} else {
+		t.Checksum = checksum
+	}
+
 	t.cache(outType)
-}
-
-func (t *Task) execConcurrent() <-chan *Task {
-	ch := make(chan *Task, 1)
-
-	go func() {
-		ctx := NewBuildCtx()
-		tasks := []<-chan *Task{}
-		for _, dep := range t.Dep {
-			if task, ok := taskKV[dep]; ok {
-				tasks = append(tasks, task.execConcurrent())
-			}
-		}
-		for _, task := range tasks {
-			t := <-task
-			ctx.Dep[t.Name] = t.Out
-		}
-
-		log.Printf("running %q", t.Name)
-		t.Fn(ctx)
-		t.Out = ctx.Out
-		t.checksumEntries(ctx)
-		fmt.Println(t.Checksum)
-
-		ch <- t
-	}()
-
-	return ch
 }
 
 type BuildCtxFunc func(BuildCtx)
 
 var taskKV map[string]*Task = map[string]*Task{}
 
+var scheduler = NewScheduler()
+
+var taskRecordLoc = tmpDir + "/.records.json"
+
+func SaveTasks() {
+	taskRecords := []TaskRecord{}
+	for name, task := range taskKV {
+		if task.Checksum == "" {
+			continue
+		}
+		taskRecords = append(taskRecords, TaskRecord{Checksum: task.Checksum, Name: name})
+	}
+
+	slices.SortFunc(taskRecords, func(a, b TaskRecord) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	if len(taskRecords) == 0 {
+		return
+	}
+
+	bs, err := json.MarshalIndent(taskRecords, "", "	")
+	if err != nil {
+		log.Fatalf("marshing records: %s", err)
+	}
+
+	fd, err := os.OpenFile(taskRecordLoc, os.O_CREATE|os.O_RDWR, 0775)
+	if err != nil {
+		log.Fatalf("opening file: %s", err)
+	}
+	defer fd.Close()
+
+	if _, err = fd.Write(bs); err != nil {
+		log.Fatalf("writing to file: %s", err)
+	}
+}
+
+func RestoreTasks() {
+	fd, err := os.Open(taskRecordLoc)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		log.Fatalf("opening file: %s", err)
+	}
+	defer fd.Close()
+
+	bs, err := io.ReadAll(fd)
+	if err != nil {
+		log.Fatalf("reading file: %s", err)
+	}
+	var taskRecords = []TaskRecord{}
+	if err = json.Unmarshal(bs, &taskRecords); err != nil {
+		log.Fatalf("unmarshing: %s", err)
+	}
+
+	for _, rec := range taskRecords {
+		task, ok := taskKV[rec.Name]
+		if !ok {
+			continue
+		}
+		task.Checksum = rec.Checksum
+		task.Out = getCacheLoc(task.Checksum)
+
+		if _, err := os.Lstat(task.Out); os.IsNotExist(err) {
+			task.Checksum = ""
+			task.Out = ""
+		}
+	}
+}
+
 func Register(name string, deps []string, fn BuildCtxFunc) {
-	task := &Task{Dep: deps, Fn: fn, Name: name}
+	task := &Task{Dep: deps, Fn: fn, Name: name, Dirty: true, mu: sync.Mutex{}}
 	taskKV[name] = task
 }
 
 func ExecWithDefault(def string) error {
+	RestoreTasks()
+	scheduler.Start()
 	if task, ok := taskKV[def]; ok {
-		<-task.execConcurrent()
+		<-scheduler.Schedule(task)
 	} else {
 		return fmt.Errorf("%q task not found", def)
 	}
+	SaveTasks()
 	return nil
 }
