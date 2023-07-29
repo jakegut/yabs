@@ -210,10 +210,20 @@ func getCacheLoc(checksum string) string {
 	return filepath.Join(tmpDir, "cache", checksum[:2], checksum[2:])
 }
 
+func removeDir(path string) {
+	if !strings.HasPrefix(path, ".yabs/out") {
+		log.Fatalf("about to remove a non-out dir: %q", path)
+	}
+
+	if err := os.RemoveAll(path); err != nil {
+		log.Fatalf("remove dir: %s", err)
+	}
+}
+
 func (t *Task) cache(outType OutType) {
 	loc := getCacheLoc(t.Checksum)
 	if err := os.MkdirAll(filepath.Dir(loc), 0770); err != nil {
-		if !errors.Is(err, os.ErrExist) {
+		if !os.IsExist(err) {
 			log.Fatalf("creating parent dir: %s", err)
 		}
 	}
@@ -280,6 +290,7 @@ func (t *Task) checksumEntries(ctx BuildCtx) {
 
 	if checksum == t.Checksum {
 		t.Dirty = false
+		removeDir(t.Out)
 		return
 	} else {
 		t.Checksum = checksum
