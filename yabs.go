@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"golang.org/x/exp/slices"
 )
@@ -57,6 +56,7 @@ func (r *RunConfig) Exec() error {
 
 	cmd := exec.Command(r.cmd[0], r.cmd[1:]...)
 	cmd.Stdout = fd
+	cmd.Stderr = os.Stderr
 
 	env := os.Environ()
 	for k, v := range r.env {
@@ -186,6 +186,7 @@ func NewBuildCtx() BuildCtx {
 type TaskRecord struct {
 	Name     string
 	Checksum string
+	Deps     []string
 }
 
 type Task struct {
@@ -195,8 +196,6 @@ type Task struct {
 	Out      string
 	Checksum string
 	Dirty    bool
-	mu       sync.Mutex
-	chQueue  []chan *Task
 }
 
 type OutType int
@@ -300,10 +299,11 @@ var taskRecordLoc = tmpDir + "/.records.json"
 func SaveTasks() {
 	taskRecords := []TaskRecord{}
 	for name, task := range taskKV {
-		if task.Checksum == "" {
+		if task.Checksum == "" && len(task.Dep) == 0 {
 			continue
 		}
-		taskRecords = append(taskRecords, TaskRecord{Checksum: task.Checksum, Name: name})
+		slices.Sort(task.Dep)
+		taskRecords = append(taskRecords, TaskRecord{Checksum: task.Checksum, Name: name, Deps: task.Dep})
 	}
 
 	slices.SortFunc(taskRecords, func(a, b TaskRecord) int {
@@ -319,7 +319,7 @@ func SaveTasks() {
 		log.Fatalf("marshing records: %s", err)
 	}
 
-	fd, err := os.OpenFile(taskRecordLoc, os.O_CREATE|os.O_RDWR, 0775)
+	fd, err := os.OpenFile(taskRecordLoc, os.O_CREATE|os.O_WRONLY, 0775)
 	if err != nil {
 		log.Fatalf("opening file: %s", err)
 	}
@@ -354,18 +354,30 @@ func RestoreTasks() {
 		if !ok {
 			continue
 		}
-		task.Checksum = rec.Checksum
-		task.Out = getCacheLoc(task.Checksum)
-
-		if _, err := os.Lstat(task.Out); os.IsNotExist(err) {
-			task.Checksum = ""
-			task.Out = ""
+		if len(rec.Checksum) > 0 {
+			loc := getCacheLoc(rec.Checksum)
+			if _, err := os.Lstat(loc); err == nil {
+				task.Checksum = rec.Checksum
+				task.Out = loc
+			}
 		}
+
+		task.Dirty = len(task.Dep) != len(rec.Deps)
+		if !task.Dirty {
+			for i := range rec.Deps {
+				if task.Dep[i] != rec.Deps[i] {
+					task.Dirty = true
+					break
+				}
+			}
+		}
+
 	}
 }
 
 func Register(name string, deps []string, fn BuildCtxFunc) {
-	task := &Task{Dep: deps, Fn: fn, Name: name, Dirty: true, mu: sync.Mutex{}}
+	slices.Sort(deps)
+	task := &Task{Dep: deps, Fn: fn, Name: name}
 	taskKV[name] = task
 }
 

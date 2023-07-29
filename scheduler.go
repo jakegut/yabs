@@ -35,7 +35,7 @@ func (s *Scheduler) execTask(t *Task) {
 		}
 	}
 
-	dirty := len(tasks) == 0
+	dirty := len(tasks) == 0 || t.Dirty
 	for _, task := range tasks {
 		tmpTask := <-task
 		ctx.Dep[tmpTask.Name] = tmpTask.Out
