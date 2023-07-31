@@ -1,7 +1,6 @@
 package yabs
 
 import (
-	"crypto/sha256"
 	"io/fs"
 	"log"
 	"os"
@@ -9,17 +8,11 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"golang.org/x/exp/slices"
 )
 
 func Fs(name string, globs []string) string {
-	slices.Sort(globs)
 	if len(globs) == 0 {
 		log.Fatalf("list of globs can't be empty")
-	}
-	nameHash := sha256.New()
-	for _, glob := range globs {
-		nameHash.Sum([]byte(glob))
 	}
 	Register(name, []string{}, func(bc BuildCtx) {
 		for _, glob := range globs {

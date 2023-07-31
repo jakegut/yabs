@@ -60,4 +60,6 @@ func main() {
 	if err := yabs.ExecWithDefault("release"); err != nil {
 		log.Fatal(err)
 	}
+
+	yabs.Prune()
 }

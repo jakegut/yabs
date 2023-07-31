@@ -234,15 +234,8 @@ func (t *Task) cache(outType OutType) {
 		return
 	}
 
-	switch outType {
-	case File:
-		if err = os.Link(t.Out, loc); err != nil {
-			log.Fatalf("creating link: %s\n", err)
-		}
-	case Dir:
-		if err = os.Symlink(t.Out, loc); err != nil {
-			log.Fatalf("creating link: %s\n", err)
-		}
+	if err = os.Symlink(t.Out, loc); err != nil {
+		log.Fatalf("creating link: %s\n", err)
 	}
 
 	t.Out = loc
@@ -383,6 +376,43 @@ func RestoreTasks() {
 			}
 		}
 
+	}
+}
+
+func Prune() {
+	validOuts := map[string]bool{}
+	for _, t := range taskKV {
+		if len(t.Checksum) == 0 {
+			continue
+		}
+		path, err := os.Readlink(getCacheLoc(t.Checksum))
+		if err != nil {
+			log.Fatalf("prune: %s", err)
+		}
+		validOuts[path] = true
+	}
+
+	toDelete := []string{}
+	if err := filepath.WalkDir(".yabs/out", func(path string, d fs.DirEntry, err error) error {
+		if path == ".yabs/out" {
+			return nil
+		}
+		if !validOuts[path] {
+			toDelete = append(toDelete, path)
+		} else if d.IsDir() {
+			return fs.SkipDir
+		}
+		return nil
+	}); err != nil {
+		log.Fatalf("prune: %s", err)
+	}
+
+	fmt.Println(toDelete)
+
+	for _, path := range toDelete {
+		if err := os.RemoveAll(path); err != nil {
+			log.Fatalf("prune: %s", err)
+		}
 	}
 }
 
