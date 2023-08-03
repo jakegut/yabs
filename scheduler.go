@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-const POOL_SIZE = 2
+const POOL_SIZE = 5
 
 type Scheduler struct {
 	taskQueue map[string][]chan *Task

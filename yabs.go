@@ -226,6 +226,17 @@ func (t *Task) cache(y *Yabs, outType OutType) {
 	t.Out = loc
 }
 
+func isEmptyDir(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		log.Fatalf("isEmptyDir: %s", err)
+	}
+	defer f.Close()
+
+	_, err = f.Readdirnames(1)
+	return err == io.EOF
+}
+
 func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
 	outType := None
 	fd, err := os.Stat(t.Out)
@@ -233,14 +244,7 @@ func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
 		log.Fatalf("stat tmp out: %s", err)
 	} else if fd != nil {
 		if fd.IsDir() {
-			f, err := os.Open(t.Out)
-			if err != nil {
-				log.Fatalf("open dir: %s", err)
-			}
-			defer f.Close()
-
-			_, err = f.Readdirnames(1)
-			if err == io.EOF {
+			if isEmptyDir(t.Out) {
 				outType = None
 			} else {
 				outType = Dir
@@ -432,13 +436,15 @@ func (y *Yabs) Prune() {
 		log.Fatalf("prune: %s", err)
 	}
 
-	fmt.Println(toDelete)
-
-	// return
-
 	for _, path := range toDelete {
 		if err := os.RemoveAll(path); err != nil {
 			log.Fatalf("prune: %s", err)
+		}
+		dir := filepath.Dir(path)
+		if isEmptyDir(filepath.Dir(path)) {
+			if err := os.Remove(dir); err != nil {
+				log.Fatalf("removing parent: %s", err)
+			}
 		}
 	}
 }
