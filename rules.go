@@ -10,11 +10,11 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-func Fs(name string, globs []string) string {
+func Fs(y *Yabs, name string, globs []string) string {
 	if len(globs) == 0 {
 		log.Fatalf("list of globs can't be empty")
 	}
-	Register(name, []string{}, func(bc BuildCtx) {
+	y.Register(name, []string{}, func(bc BuildCtx) {
 		for _, glob := range globs {
 
 			err := doublestar.GlobWalk(os.DirFS("."), glob, func(path string, d fs.DirEntry) error {

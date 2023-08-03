@@ -1,34 +1,41 @@
 package yabs
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sync"
+
+	"golang.org/x/sync/semaphore"
 )
 
-const POOL_SIZE = 10
+const POOL_SIZE = 2
 
 type Scheduler struct {
-	taskKV   map[string][]chan *Task
-	taskDone map[string]bool
-	mu       *sync.Mutex
-	taskCh   chan *Task
+	taskQueue map[string][]chan *Task
+	taskDone  map[string]bool
+	mu        *sync.Mutex
+	y         *Yabs
+	sema      *semaphore.Weighted
 }
 
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		taskKV:   make(map[string][]chan *Task),
-		taskDone: make(map[string]bool),
-		mu:       &sync.Mutex{},
-		taskCh:   make(chan *Task),
+		taskQueue: make(map[string][]chan *Task),
+		taskDone:  make(map[string]bool),
+		mu:        &sync.Mutex{},
 	}
 }
 
 func (s *Scheduler) execTask(t *Task) {
-	ctx := NewBuildCtx()
+	out, err := s.y.newTmpOut()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := NewBuildCtx(out)
 	tasks := []<-chan *Task{}
 	for _, dep := range t.Dep {
-		if task, ok := taskKV[dep]; ok {
+		if task, ok := s.y.taskKV[dep]; ok {
 			tasks = append(tasks, s.Schedule(task))
 		} else {
 			fmt.Println("dep not found", dep)
@@ -44,26 +51,22 @@ func (s *Scheduler) execTask(t *Task) {
 
 	t.Dirty = dirty
 	if dirty {
+		s.sema.Acquire(context.Background(), 1)
 		log.Printf("running %q", t.Name)
 		t.Fn(ctx)
+		s.sema.Release(1)
 		t.Out = ctx.Out
-		t.checksumEntries(ctx)
+		t.checksumEntries(s.y, ctx)
 	} else {
 		log.Printf("no actions for %q", t.Name)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ch := range s.taskKV[t.Name] {
+	for _, ch := range s.taskQueue[t.Name] {
 		ch <- t
 	}
 	s.taskDone[t.Name] = true
-}
-
-func (s *Scheduler) taskWorker() {
-	for task := range s.taskCh {
-		s.execTask(task)
-	}
 }
 
 func (s *Scheduler) Schedule(t *Task) chan *Task {
@@ -76,19 +79,17 @@ func (s *Scheduler) Schedule(t *Task) chan *Task {
 		return ch
 	}
 
-	if _, ok := s.taskKV[t.Name]; ok {
-		s.taskKV[t.Name] = append(s.taskKV[t.Name], ch)
+	if _, ok := s.taskQueue[t.Name]; ok {
+		s.taskQueue[t.Name] = append(s.taskQueue[t.Name], ch)
 	} else {
-		s.taskKV[t.Name] = make([]chan *Task, 1)
-		s.taskKV[t.Name][0] = ch
-		s.taskCh <- t
+		s.taskQueue[t.Name] = make([]chan *Task, 1)
+		s.taskQueue[t.Name][0] = ch
+		go s.execTask(t)
 	}
 
 	return ch
 }
 
 func (s *Scheduler) Start() {
-	for i := 0; i < POOL_SIZE; i++ {
-		go s.taskWorker()
-	}
+	s.sema = semaphore.NewWeighted(POOL_SIZE)
 }

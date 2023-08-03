@@ -12,7 +12,9 @@ import (
 
 func main() {
 
-	yabs.Register("sleepy", []string{}, func(bc yabs.BuildCtx) {
+	bs := yabs.New()
+
+	bs.Register("sleepy", []string{}, func(bc yabs.BuildCtx) {
 		time.Sleep(time.Second * 1)
 
 		bc.Run("echo", "h3223223ry").
@@ -20,16 +22,20 @@ func main() {
 			Exec()
 	})
 
-	yabs.Register("sleep_dep_1", []string{"sleepy"}, func(bc yabs.BuildCtx) {
+	bs.Register("sleep_dep_1", []string{"sleepy"}, func(bc yabs.BuildCtx) {
+		time.Sleep(time.Second * 5)
+		fmt.Println("sleep_dep_1")
 		fmt.Println(bc.Dep["sleepy"])
 	})
-	yabs.Register("sleep_dep_2", []string{"sleepy"}, func(bc yabs.BuildCtx) {
+	bs.Register("sleep_dep_2", []string{"sleepy"}, func(bc yabs.BuildCtx) {
+		log.Fatal("rip")
+		fmt.Println("sleep_dep_2")
 		fmt.Println(bc.Dep["sleepy"])
 	})
 
-	yabs.Register("sleepy_final", []string{"sleep_dep_1", "sleep_dep_2"}, func(bc yabs.BuildCtx) {})
+	bs.Register("sleepy_final", []string{"sleep_dep_1", "sleep_dep_2"}, func(bc yabs.BuildCtx) {})
 
-	fileDeps := yabs.Fs("go_files", []string{"go.mod", "go.sum", "**/*.go"})
+	fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
 
 	oss := []string{"windows", "linux", "darwin"}
 	goBuildTargets := []string{}
@@ -38,7 +44,7 @@ func main() {
 		target := fmt.Sprintf("build_%s", targetOS)
 		goBuildTargets = append(goBuildTargets, target)
 
-		yabs.Register(target, []string{fileDeps}, func(bc yabs.BuildCtx) {
+		bs.Register(target, []string{fileDeps}, func(bc yabs.BuildCtx) {
 			goFiles, err := os.Readlink(bc.Dep["go_files"])
 			if err != nil {
 				log.Fatalf("read go_files: %s", err)
@@ -50,16 +56,16 @@ func main() {
 		})
 	}
 
-	yabs.Register("release", goBuildTargets, func(bc yabs.BuildCtx) {
+	bs.Register("release", goBuildTargets, func(bc yabs.BuildCtx) {
 		fmt.Println("releasing...")
 		for name, dep := range bc.Dep {
 			fmt.Println(name, dep)
 		}
 	})
 
-	if err := yabs.ExecWithDefault("release"); err != nil {
+	if err := bs.ExecWithDefault("release"); err != nil {
 		log.Fatal(err)
 	}
 
-	yabs.Prune()
+	bs.Prune()
 }

@@ -73,24 +73,13 @@ func (r *RunConfig) Exec() error {
 	return nil
 }
 
-var tmpDir = func() string {
-	path := ".yabs"
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		err := os.Mkdir(path, os.ModePerm)
-		if err != nil {
-			log.Fatalf("creating tmp dir: %s", err)
-		}
-	}
-	return ".yabs"
-}()
-
-func getTmp(prefix string) (string, error) {
+func getTmp(loc, prefix string) (string, error) {
 	try := 0
 	var err error
 	for try < 10000 {
 		rand := strconv.Itoa(int(rand.Uint32()))
 
-		path := filepath.Join(tmpDir, "out", prefix+rand)
+		path := filepath.Join(loc, "out", prefix+rand)
 
 		_, err = os.Stat(path)
 
@@ -103,8 +92,8 @@ func getTmp(prefix string) (string, error) {
 	return "", err
 }
 
-func newTmpOut() (string, error) {
-	return getTmp("yabs-out-")
+func (y *Yabs) newTmpOut() (string, error) {
+	return getTmp(y.tmpDir, "yabs-out-")
 }
 
 func getFileChecksum(path string) ([]byte, error) {
@@ -171,14 +160,10 @@ type BuildCtx struct {
 	Dep map[string]string
 }
 
-func NewBuildCtx() BuildCtx {
-	tmpOut, err := newTmpOut()
-	if err != nil {
-		log.Fatal(err)
-	}
+func NewBuildCtx(out string) BuildCtx {
 	return BuildCtx{
 		Run: NewRunConfig,
-		Out: tmpOut,
+		Out: out,
 		Dep: map[string]string{},
 	}
 }
@@ -206,8 +191,8 @@ const (
 	Dir
 )
 
-func getCacheLoc(checksum string) string {
-	return filepath.Join(tmpDir, "cache", checksum[:2], checksum[2:])
+func (y *Yabs) getCacheLoc(checksum string) string {
+	return filepath.Join(y.tmpDir, "cache", checksum[:2], checksum[2:])
 }
 
 func removeDir(path string) {
@@ -220,8 +205,8 @@ func removeDir(path string) {
 	}
 }
 
-func (t *Task) cache(outType OutType) {
-	loc := getCacheLoc(t.Checksum)
+func (t *Task) cache(y *Yabs, outType OutType) {
+	loc := y.getCacheLoc(t.Checksum)
 	if err := os.MkdirAll(filepath.Dir(loc), 0770); err != nil {
 		if !os.IsExist(err) {
 			log.Fatalf("creating parent dir: %s", err)
@@ -241,7 +226,7 @@ func (t *Task) cache(outType OutType) {
 	t.Out = loc
 }
 
-func (t *Task) checksumEntries(ctx BuildCtx) {
+func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
 	outType := None
 	fd, err := os.Stat(t.Out)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -289,20 +274,21 @@ func (t *Task) checksumEntries(ctx BuildCtx) {
 		t.Checksum = checksum
 	}
 
-	t.cache(outType)
+	t.cache(y, outType)
 }
 
 type BuildCtxFunc func(BuildCtx)
 
-var taskKV map[string]*Task = map[string]*Task{}
+type Yabs struct {
+	scheduler     *Scheduler
+	taskKV        map[string]*Task
+	taskRecordLoc string
+	tmpDir        string
+}
 
-var scheduler = NewScheduler()
-
-var taskRecordLoc = tmpDir + "/.records.json"
-
-func SaveTasks() {
+func (y *Yabs) getTaskRecords() []TaskRecord {
 	taskRecords := []TaskRecord{}
-	for name, task := range taskKV {
+	for name, task := range y.taskKV {
 		if task.Checksum == "" && len(task.Dep) == 0 {
 			continue
 		}
@@ -314,16 +300,40 @@ func SaveTasks() {
 		return strings.Compare(a.Name, b.Name)
 	})
 
-	if len(taskRecords) == 0 {
-		return
+	return taskRecords
+}
+
+func New() *Yabs {
+	tmpDir := func() string {
+		path := ".yabs"
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			err := os.Mkdir(path, os.ModePerm)
+			if err != nil {
+				log.Fatalf("creating tmp dir: %s", err)
+			}
+		}
+		return ".yabs"
+	}()
+	y := &Yabs{
+		scheduler:     NewScheduler(),
+		taskKV:        map[string]*Task{},
+		taskRecordLoc: filepath.Join(tmpDir, ".records.json"),
+		tmpDir:        tmpDir,
 	}
+	// TODO: resolve this circular reference (seperate taskKV/TaskStore struct?)
+	y.scheduler.y = y
+	return y
+}
+
+func (y *Yabs) SaveTasks() {
+	taskRecords := y.getTaskRecords()
 
 	bs, err := json.MarshalIndent(taskRecords, "", "	")
 	if err != nil {
 		log.Fatalf("marshing records: %s", err)
 	}
 
-	fd, err := os.OpenFile(taskRecordLoc, os.O_CREATE|os.O_WRONLY, 0775)
+	fd, err := os.OpenFile(y.taskRecordLoc, os.O_CREATE|os.O_WRONLY, 0775)
 	if err != nil {
 		log.Fatalf("opening file: %s", err)
 	}
@@ -334,8 +344,8 @@ func SaveTasks() {
 	}
 }
 
-func RestoreTasks() {
-	fd, err := os.Open(taskRecordLoc)
+func (y *Yabs) RestoreTasks() {
+	fd, err := os.Open(y.taskRecordLoc)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return
@@ -354,12 +364,12 @@ func RestoreTasks() {
 	}
 
 	for _, rec := range taskRecords {
-		task, ok := taskKV[rec.Name]
+		task, ok := y.taskKV[rec.Name]
 		if !ok {
 			continue
 		}
 		if len(rec.Checksum) > 0 {
-			loc := getCacheLoc(rec.Checksum)
+			loc := y.getCacheLoc(rec.Checksum)
 			if _, err := os.Lstat(loc); err == nil {
 				task.Checksum = rec.Checksum
 				task.Out = loc
@@ -379,13 +389,15 @@ func RestoreTasks() {
 	}
 }
 
-func Prune() {
+func (y *Yabs) Prune() {
 	validOuts := map[string]bool{}
-	for _, t := range taskKV {
+	for _, t := range y.taskKV {
 		if len(t.Checksum) == 0 {
 			continue
 		}
-		path, err := os.Readlink(getCacheLoc(t.Checksum))
+		cacheLoc := y.getCacheLoc(t.Checksum)
+		validOuts[cacheLoc] = true
+		path, err := os.Readlink(cacheLoc)
 		if err != nil {
 			log.Fatalf("prune: %s", err)
 		}
@@ -399,8 +411,21 @@ func Prune() {
 		}
 		if !validOuts[path] {
 			toDelete = append(toDelete, path)
-		} else if d.IsDir() {
-			return fs.SkipDir
+		}
+		if d.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	}); err != nil {
+		log.Fatalf("prune: %s", err)
+	}
+
+	if err := filepath.WalkDir(".yabs/cache", func(path string, d fs.DirEntry, err error) error {
+		if path == ".yabs/cache" || d.IsDir() {
+			return nil
+		}
+		if !validOuts[path] {
+			toDelete = append(toDelete, path)
 		}
 		return nil
 	}); err != nil {
@@ -409,6 +434,8 @@ func Prune() {
 
 	fmt.Println(toDelete)
 
+	// return
+
 	for _, path := range toDelete {
 		if err := os.RemoveAll(path); err != nil {
 			log.Fatalf("prune: %s", err)
@@ -416,20 +443,20 @@ func Prune() {
 	}
 }
 
-func Register(name string, deps []string, fn BuildCtxFunc) {
+func (y *Yabs) Register(name string, deps []string, fn BuildCtxFunc) {
 	slices.Sort(deps)
 	task := &Task{Dep: deps, Fn: fn, Name: name}
-	taskKV[name] = task
+	y.taskKV[name] = task
 }
 
-func ExecWithDefault(def string) error {
-	RestoreTasks()
-	scheduler.Start()
-	if task, ok := taskKV[def]; ok {
-		<-scheduler.Schedule(task)
+func (y *Yabs) ExecWithDefault(def string) error {
+	y.RestoreTasks()
+	y.scheduler.Start()
+	if task, ok := y.taskKV[def]; ok {
+		<-y.scheduler.Schedule(task)
 	} else {
 		return fmt.Errorf("%q task not found", def)
 	}
-	SaveTasks()
+	y.SaveTasks()
 	return nil
 }
