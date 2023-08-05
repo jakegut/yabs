@@ -5,35 +5,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/jakegut/yabs"
+	"github.com/jakegut/yabs/toolchain"
 )
 
-func main() {
+func _main() {
 
 	bs := yabs.New()
-
-	bs.Register("sleepy", []string{}, func(bc yabs.BuildCtx) {
-		time.Sleep(time.Second * 1)
-
-		bc.Run("echo", "h3223223ry").
-			StdoutToFile(bc.Out).
-			Exec()
-	})
-
-	bs.Register("sleep_dep_1", []string{"sleepy"}, func(bc yabs.BuildCtx) {
-		time.Sleep(time.Second * 5)
-		fmt.Println("sleep_dep_1")
-		fmt.Println(bc.Dep["sleepy"])
-	})
-	bs.Register("sleep_dep_2", []string{"sleepy"}, func(bc yabs.BuildCtx) {
-		log.Fatal("rip")
-		fmt.Println("sleep_dep_2")
-		fmt.Println(bc.Dep["sleepy"])
-	})
-
-	bs.Register("sleepy_final", []string{"sleep_dep_1", "sleep_dep_2"}, func(bc yabs.BuildCtx) {})
 
 	fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
 
@@ -68,4 +47,21 @@ func main() {
 	}
 
 	bs.Prune()
+}
+
+func main() {
+	bs := yabs.New()
+
+	v := toolchain.Go(bs, "go1.20.7")
+
+	fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
+
+	bs.Register("env", []string{v, fileDeps}, func(bc yabs.BuildCtx) {
+		goBinLoc, _ := os.Readlink(bc.Dep[v])
+		goBin := filepath.Join(goBinLoc, "go")
+
+		bc.Run(goBin, "env").Exec()
+	})
+
+	bs.ExecWithDefault("env")
 }
