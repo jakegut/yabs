@@ -28,7 +28,7 @@ func Fs(y *Yabs, name string, globs []string) string {
 						return doublestar.SkipDir
 					}
 					newname := filepath.Join(bc.Out, path)
-					if err := os.MkdirAll(filepath.Dir(newname), 0777); err != nil {
+					if err := os.MkdirAll(filepath.Dir(newname), 0770); err != nil {
 						log.Fatalf("mkdir: %+v", err)
 					}
 					if err := os.Link(path, newname); err != nil {

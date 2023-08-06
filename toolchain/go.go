@@ -42,8 +42,9 @@ func (g *GoToolchain) download() {
 	prefix := fmt.Sprintf(".yabs/go/%s", g.version)
 
 	if _, err := os.Stat(prefix); os.IsNotExist(err) {
-		os.MkdirAll(prefix, 0755)
+		os.MkdirAll(prefix, 0770)
 	} else {
+		g.binLocation = filepath.Join(prefix, "go", "bin")
 		log.Printf("already have %s", g.version)
 		return
 	}
@@ -91,7 +92,7 @@ func (g *GoToolchain) extract(prefix string) {
 		log.Fatalf("windows not supported")
 	}
 
-	g.binLocation = filepath.Join(prefix, "go/bin")
+	g.binLocation = filepath.Join(prefix, "go", "bin")
 }
 
 func (g *GoToolchain) extractTarGz(prefix string, r io.Reader) error {
@@ -117,7 +118,7 @@ func (g *GoToolchain) extractTarGz(prefix string, r io.Reader) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.Mkdir(name, 0755); err != nil {
+			if err := os.Mkdir(name, 0770); err != nil {
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 		case tar.TypeReg:

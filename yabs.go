@@ -93,7 +93,14 @@ func getTmp(loc, prefix string) (string, error) {
 }
 
 func (y *Yabs) newTmpOut() (string, error) {
-	return getTmp(y.tmpDir, "yabs-out-")
+	tmp, err := getTmp(y.tmpDir, "yabs-out-")
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(tmp), 0700); err != nil && !os.IsExist(err) {
+		log.Fatalf("tmpout: %s", err)
+	}
+	return tmp, nil
 }
 
 func getFileChecksum(path string) ([]byte, error) {
@@ -207,10 +214,8 @@ func removeDir(path string) {
 
 func (t *Task) cache(y *Yabs, outType OutType) {
 	loc := y.getCacheLoc(t.Checksum)
-	if err := os.MkdirAll(filepath.Dir(loc), 0770); err != nil {
-		if !os.IsExist(err) {
-			log.Fatalf("creating parent dir: %s", err)
-		}
+	if err := os.MkdirAll(filepath.Dir(loc), 0770); err != nil && !os.IsExist(err) {
+		log.Fatalf("creating parent dir: %s", err)
 	}
 
 	_, err := os.Lstat(loc)
@@ -220,7 +225,7 @@ func (t *Task) cache(y *Yabs, outType OutType) {
 	}
 
 	if err = os.Symlink(t.Out, loc); err != nil {
-		log.Fatalf("creating link: %s\n", err)
+		log.Fatalf("creating link: %s", err)
 	}
 
 	t.Out = loc
@@ -273,6 +278,7 @@ func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
 	if checksum == t.Checksum {
 		t.Dirty = false
 		removeDir(t.Out)
+		t.Out = y.getCacheLoc(t.Checksum)
 		return
 	} else {
 		t.Checksum = checksum
@@ -337,7 +343,7 @@ func (y *Yabs) SaveTasks() {
 		log.Fatalf("marshing records: %s", err)
 	}
 
-	fd, err := os.OpenFile(y.taskRecordLoc, os.O_CREATE|os.O_WRONLY, 0775)
+	fd, err := os.Create(y.taskRecordLoc)
 	if err != nil {
 		log.Fatalf("opening file: %s", err)
 	}

@@ -10,9 +10,11 @@ import (
 	"github.com/jakegut/yabs/toolchain"
 )
 
-func _main() {
-
+func main() {
+	//
 	bs := yabs.New()
+
+	goTc := toolchain.Go(bs, "go1.20.7")
 
 	fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
 
@@ -23,12 +25,13 @@ func _main() {
 		target := fmt.Sprintf("build_%s", targetOS)
 		goBuildTargets = append(goBuildTargets, target)
 
-		bs.Register(target, []string{fileDeps}, func(bc yabs.BuildCtx) {
-			goFiles, err := os.Readlink(bc.Dep["go_files"])
-			if err != nil {
-				log.Fatalf("read go_files: %s", err)
-			}
-			err = bc.Run("go", "build", "-o", bc.Out, filepath.Join(goFiles, "examples/main.go")).WithEnv("GOOS", targetOS).Exec()
+		bs.Register(target, []string{fileDeps, goTc}, func(bc yabs.BuildCtx) {
+			goFiles, _ := os.Readlink(bc.Dep[fileDeps])
+
+			goBinLoc, _ := os.Readlink(bc.Dep[goTc])
+			goBin := filepath.Join(goBinLoc, "go")
+
+			err := bc.Run(goBin, "build", "-o", bc.Out, filepath.Join(goFiles, "examples/main.go")).WithEnv("GOOS", targetOS).Exec()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -49,19 +52,17 @@ func _main() {
 	bs.Prune()
 }
 
-func main() {
-	bs := yabs.New()
+// func main() {
+// 	bs := yabs.New()
 
-	v := toolchain.Go(bs, "go1.20.7")
+// 	fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
 
-	fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
+// 	bs.Register("build", []string{v, fileDeps}, func(bc yabs.BuildCtx) {
+// 		goBinLoc, _ := os.Readlink(bc.Dep[v])
+// 		goBin := filepath.Join(goBinLoc, "go")
 
-	bs.Register("env", []string{v, fileDeps}, func(bc yabs.BuildCtx) {
-		goBinLoc, _ := os.Readlink(bc.Dep[v])
-		goBin := filepath.Join(goBinLoc, "go")
+// 		bc.Run(goBin, "build", "examples/main.go").Exec()
+// 	})
 
-		bc.Run(goBin, "env").Exec()
-	})
-
-	bs.ExecWithDefault("env")
-}
+// 	bs.ExecWithDefault("build")
+// }

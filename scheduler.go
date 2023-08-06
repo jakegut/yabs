@@ -30,7 +30,7 @@ func NewScheduler() *Scheduler {
 func (s *Scheduler) execTask(t *Task) {
 	out, err := s.y.newTmpOut()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("creating tmp out: %s", err)
 	}
 	ctx := NewBuildCtx(out)
 	tasks := []<-chan *Task{}
