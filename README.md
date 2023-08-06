@@ -47,7 +47,7 @@ for _, targetOS := range oss {
     bs.Register(target, []string{fileDeps}, func(bc yabs.BuildCtx) {
         // output from dependencies are avaliable via the `BuildCtx.Dep` map
         // outputs are symlinks from `.yabs/cache/...` to `.yabs/out/...`
-        goFiles, _err_ := os.Readlink(bc.Dep[fileDeps])
+        goFiles, _ := os.Readlink(bc.Dep[fileDeps])
 
         goBinLoc, _ := os.Readlink(bc.Dep[goTc])
         goBin := filepath.Join(goBinLoc, "go")
