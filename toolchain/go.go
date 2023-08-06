@@ -13,9 +13,8 @@ import (
 )
 
 type GoToolchain struct {
-	version      string
-	binLocation  string
-	downloadPath string
+	version     string
+	binLocation string
 }
 
 func newGo(version string) *GoToolchain {
@@ -30,7 +29,9 @@ func (g *GoToolchain) getDownloadUrl() string {
 
 	archiveExt := "tar.gz"
 	if os == "windows" {
-		archiveExt = "zip"
+		// archiveExt = "zip"
+		// TODO: implement unzipping
+		log.Fatalf("windows not supported")
 	}
 
 	return fmt.Sprintf("https://go.dev/dl/%s.%s-%s.%s", g.version, os, arch, archiveExt)
@@ -41,21 +42,16 @@ func (g *GoToolchain) download() {
 
 	prefix := fmt.Sprintf(".yabs/go/%s", g.version)
 
+	g.binLocation = filepath.Join(prefix, "go", "bin")
+
 	if _, err := os.Stat(prefix); os.IsNotExist(err) {
 		os.MkdirAll(prefix, 0770)
 	} else {
-		g.binLocation = filepath.Join(prefix, "go", "bin")
 		log.Printf("already have %s", g.version)
 		return
 	}
 
-	out, err := os.CreateTemp("", "yabs-go-toolchain-archive-")
-	if err != nil {
-		log.Fatalf("create temp: %s", err)
-	}
-	defer out.Close()
-
-	log.Printf("downloading %q from %s to %s", g.version, downloadUrl, out.Name())
+	log.Printf("downloading %q from %s", g.version, downloadUrl)
 
 	resp, err := http.Get(downloadUrl)
 	if err != nil {
@@ -67,32 +63,7 @@ func (g *GoToolchain) download() {
 		log.Fatalf("bad status: %s", resp.Status)
 	}
 
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		log.Fatalf("copying %s", err)
-	}
-
-	g.downloadPath = out.Name()
-	g.extract(prefix)
-}
-
-func (g *GoToolchain) extract(prefix string) {
-	r, err := os.Open(g.downloadPath)
-	if err != nil {
-		log.Fatalf("extract: %s", err)
-	}
-
-	if runtime.GOOS != "windows" {
-		g.extractTarGz(prefix, r)
-		r.Close()
-		os.Remove(g.downloadPath)
-		g.downloadPath = ""
-	} else {
-		r.Close()
-		log.Fatalf("windows not supported")
-	}
-
-	g.binLocation = filepath.Join(prefix, "go", "bin")
+	g.extractTarGz(prefix, resp.Body)
 }
 
 func (g *GoToolchain) extractTarGz(prefix string, r io.Reader) error {
