@@ -73,11 +73,13 @@ func (g *GoToolchain) download() {
 		}
 
 		reader := bytes.NewReader(buf.Bytes())
+		log.Printf("extracting zip")
 		if err := g.extractZip(prefix, reader, size); err != nil {
 			log.Fatal(err)
 		}
 
 	} else {
+		log.Printf("extracting tar.gz")
 		if err := g.extractTarGz(prefix, resp.Body); err != nil {
 			log.Fatal(err)
 		}
