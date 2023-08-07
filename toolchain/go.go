@@ -2,6 +2,9 @@ package toolchain
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bufio"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -62,8 +65,20 @@ func (g *GoToolchain) download() {
 	if resp.StatusCode != http.StatusOK {
 		log.Fatalf("bad status: %s", resp.Status)
 	}
+	if runtime.GOOS == "windows" {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		size, err := io.Copy(writer, resp.Body)
+		if err != nil {
+			log.Fatalf("writing zip to buf: %s", err)
+		}
 
-	g.extractTarGz(prefix, resp.Body)
+		reader := bytes.NewReader(buf.Bytes())
+		g.extractZip(prefix, reader, size)
+
+	} else {
+		g.extractTarGz(prefix, resp.Body)
+	}
 }
 
 func (g *GoToolchain) extractTarGz(prefix string, r io.Reader) error {
@@ -106,6 +121,46 @@ func (g *GoToolchain) extractTarGz(prefix string, r io.Reader) error {
 				"ExtractTarGz: uknown type: %d in %s",
 				header.Typeflag,
 				header.Name)
+		}
+	}
+
+	return nil
+}
+
+func (g *GoToolchain) extractZip(prefix string, r io.ReaderAt, size int64) error {
+	zp, err := zip.NewReader(r, size)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range zp.File {
+		path := filepath.Join(prefix, file.Name)
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(path, os.ModePerm); err != nil {
+				return err
+			}
+		} else {
+			if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+				return err
+			}
+
+			fd, err := file.Open()
+			if err != nil {
+				return err
+			}
+
+			dst, err := os.Create(file.Name)
+			if err != nil {
+				fd.Close()
+				return err
+			}
+
+			if _, err = io.Copy(dst, fd); err != nil {
+				return err
+			}
+
+			fd.Close()
+			dst.Close()
 		}
 	}
 
