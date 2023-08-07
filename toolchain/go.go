@@ -32,9 +32,7 @@ func (g *GoToolchain) getDownloadUrl() string {
 
 	archiveExt := "tar.gz"
 	if os == "windows" {
-		// archiveExt = "zip"
-		// TODO: implement unzipping
-		log.Fatalf("windows not supported")
+		archiveExt = "zip"
 	}
 
 	return fmt.Sprintf("https://go.dev/dl/%s.%s-%s.%s", g.version, os, arch, archiveExt)
@@ -48,7 +46,7 @@ func (g *GoToolchain) download() {
 	g.binLocation = filepath.Join(prefix, "go", "bin")
 
 	if _, err := os.Stat(prefix); os.IsNotExist(err) {
-		os.MkdirAll(prefix, 0770)
+		os.MkdirAll(prefix, os.ModePerm)
 	} else {
 		log.Printf("already have %s", g.version)
 		return
@@ -65,6 +63,7 @@ func (g *GoToolchain) download() {
 	if resp.StatusCode != http.StatusOK {
 		log.Fatalf("bad status: %s", resp.Status)
 	}
+
 	if runtime.GOOS == "windows" {
 		var buf bytes.Buffer
 		writer := bufio.NewWriter(&buf)
@@ -74,10 +73,14 @@ func (g *GoToolchain) download() {
 		}
 
 		reader := bytes.NewReader(buf.Bytes())
-		g.extractZip(prefix, reader, size)
+		if err := g.extractZip(prefix, reader, size); err != nil {
+			log.Fatal(err)
+		}
 
 	} else {
-		g.extractTarGz(prefix, resp.Body)
+		if err := g.extractTarGz(prefix, resp.Body); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -104,7 +107,7 @@ func (g *GoToolchain) extractTarGz(prefix string, r io.Reader) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.Mkdir(name, 0770); err != nil {
+			if err := os.Mkdir(name, os.ModePerm); err != nil {
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 		case tar.TypeReg:
@@ -149,7 +152,7 @@ func (g *GoToolchain) extractZip(prefix string, r io.ReaderAt, size int64) error
 				return err
 			}
 
-			dst, err := os.Create(file.Name)
+			dst, err := os.Create(path)
 			if err != nil {
 				fd.Close()
 				return err

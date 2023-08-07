@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/jakegut/yabs"
 )
@@ -22,13 +23,16 @@ func Go(bs *yabs.Yabs, version string) string {
 		tc := newGo(version)
 		tc.download()
 
-		if err := os.Mkdir(bc.Out, 0770); err != nil {
+		if err := os.Mkdir(bc.Out, os.ModePerm); err != nil {
 			log.Fatal(err)
 		}
 
 		bins := []string{"go", "gofmt"}
 
 		for _, bin := range bins {
+			if runtime.GOOS == "windows" {
+				bin += ".exe"
+			}
 			if err := os.Link(filepath.Join(tc.binLocation, bin), filepath.Join(bc.Out, bin)); err != nil {
 				log.Fatal(err)
 			}

@@ -97,7 +97,7 @@ func (y *Yabs) newTmpOut() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(tmp), 0700); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(filepath.Dir(tmp), os.ModePerm); err != nil && !os.IsExist(err) {
 		log.Fatalf("tmpout: %s", err)
 	}
 	return tmp, nil
@@ -203,7 +203,7 @@ func (y *Yabs) getCacheLoc(checksum string) string {
 }
 
 func removeDir(path string) {
-	if !strings.HasPrefix(path, ".yabs/out") {
+	if !strings.HasPrefix(path, filepath.Join(".yabs", "out")) {
 		log.Fatalf("about to remove a non-out dir: %q", path)
 	}
 
@@ -214,7 +214,7 @@ func removeDir(path string) {
 
 func (t *Task) cache(y *Yabs, outType OutType) {
 	loc := y.getCacheLoc(t.Checksum)
-	if err := os.MkdirAll(filepath.Dir(loc), 0770); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(filepath.Dir(loc), os.ModePerm); err != nil && !os.IsExist(err) {
 		log.Fatalf("creating parent dir: %s", err)
 	}
 
