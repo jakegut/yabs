@@ -3,7 +3,7 @@ target_oss := ["windows", "darwin", "linux"].map(func(opsys) {
     register(target_os, [], func(bc) {
         target := opsys
         
-        sh('GOOS={target} go build -o {bc.Out} risor/main.go')
+        'GOOS={target} go build -o {bc.Out} risor/main.go' | sh
     })
     return target_os
 })
