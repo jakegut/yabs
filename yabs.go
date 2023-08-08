@@ -20,17 +20,9 @@ import (
 )
 
 type RunConfig struct {
-	cmd []string
+	Cmd []string
 	env map[string]string
 	out string
-}
-
-func NewRunConfig(name string, args ...string) *RunConfig {
-	return &RunConfig{
-		cmd: append([]string{name}, args...),
-		env: map[string]string{},
-		out: "",
-	}
 }
 
 func (r *RunConfig) WithEnv(key, value string) *RunConfig {
@@ -54,7 +46,7 @@ func (r *RunConfig) Exec() error {
 		defer fd.Close()
 	}
 
-	cmd := exec.Command(r.cmd[0], r.cmd[1:]...)
+	cmd := exec.Command(r.Cmd[0], r.Cmd[1:]...)
 	cmd.Stdout = fd
 	cmd.Stderr = os.Stderr
 
@@ -162,17 +154,28 @@ func checksumDir(loc string) string {
 }
 
 type BuildCtx struct {
-	Run func(name string, args ...string) *RunConfig
+	// Run func(name string, args ...string) *RunConfig
 	Out string
 	Dep map[string]string
 }
 
 func NewBuildCtx(out string) BuildCtx {
 	return BuildCtx{
-		Run: NewRunConfig,
 		Out: out,
 		Dep: map[string]string{},
 	}
+}
+
+func (BuildCtx) Run(name string, args ...string) *RunConfig {
+	return &RunConfig{
+		Cmd: append([]string{name}, args...),
+		env: map[string]string{},
+		out: "",
+	}
+}
+
+func (bc *BuildCtx) GetDep(name string) string {
+	return bc.Dep[name]
 }
 
 type TaskRecord struct {

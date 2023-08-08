@@ -1,0 +1,17 @@
+target_oss := ["windows", "darwin", "linux"].map(func(opsys) {
+    target_os := 'build_{opsys}'
+    register(target_os, [], func(bc) {
+        target := opsys
+        
+        sh('GOOS={target} go build -o {bc.Out} risor/main.go')
+    })
+    return target_os
+})
+
+print(target_oss)
+
+register("target", target_oss, func (bc) {
+    for _, target_os := range target_oss {
+        print(bc.GetDep(target_os))
+    }
+})
