@@ -20,6 +20,8 @@ type GoToolchain struct {
 	binLocation string
 }
 
+//
+
 func newGo(version string) *GoToolchain {
 	return &GoToolchain{
 		version: version,

@@ -9,12 +9,67 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/jakegut/yabs"
+	"github.com/jakegut/yabs/toolchain"
 	"github.com/risor-io/risor"
 	"github.com/risor-io/risor/object"
 )
 
-const BC_KEY = "yabs:buildctx"
+func validateString(obj object.Object) (string, error) {
+	strObj, ok := obj.(*object.String)
+	if !ok {
+		return "", fmt.Errorf("expected string, got=%T", obj)
+	}
+	return strObj.String(), nil
+}
 
+type ValidateListOf interface {
+	~string
+}
+
+func validateList[T ValidateListOf](obj object.Object) ([]T, error) {
+	listObj, ok := obj.(*object.List)
+	if !ok {
+		return make([]T, 0), fmt.Errorf("expected list, got=%T", obj)
+	}
+	listOf := []T{}
+	it := listObj.Iter()
+	t := *new(T)
+	for {
+		dep, ok := it.Next()
+		if !ok {
+			break
+		}
+		switch any(t).(type) {
+		case string:
+			strObj, ok := dep.(*object.String)
+			if !ok {
+				return make([]T, 0), fmt.Errorf("wrong type of list, expected got=%T, want %T", dep, t)
+			}
+			listOf = append(listOf, any(strObj.String()).(T))
+		}
+	}
+	return listOf, nil
+}
+
+func fsFunc(y *yabs.Yabs) object.BuiltinFunction {
+	// args: name string, fileGlobs []string
+	return func(ctx context.Context, args ...object.Object) object.Object {
+		if len(args) != 2 {
+			return object.NewArgsError("fs", 2, len(args))
+		}
+		name, err := validateString(args[0])
+		if err != nil {
+			return object.NewError(err)
+		}
+		globs, err := validateList[string](args[1])
+		if err != nil {
+			object.NewError(err)
+		}
+		return object.NewString(yabs.Fs(y, name, globs))
+	}
+}
+
+// args: command string
 func sh(ctx context.Context, args ...object.Object) object.Object {
 	if len(args) != 1 {
 		return object.NewArgsError("sh", 1, len(args))
@@ -40,38 +95,38 @@ func sh(ctx context.Context, args ...object.Object) object.Object {
 	return object.Nil
 }
 
+func goTcFunc(y *yabs.Yabs) object.BuiltinFunction {
+	return func(ctx context.Context, args ...object.Object) object.Object {
+		if len(args) != 1 {
+			return object.NewArgsError("go", 1, len(args))
+		}
+		version, err := validateString(args[0])
+		if err != nil {
+			object.NewError(err)
+		}
+		return object.NewString(toolchain.Go(y, version))
+	}
+}
+
 func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
+	// args: name string, deps []string, task func(bc BuildCtx)
 	return func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 3 {
 			return object.NewArgsError("register", 3, len(args))
 		}
-		targetStr, ok := args[0].(*object.String)
-		if !ok {
-			return object.NewError(fmt.Errorf("wrong type for first arg, want=string, got=%T", args[0]))
+		target, err := validateString(args[0])
+		if err != nil {
+			object.NewError(err)
 		}
-		target := targetStr.String()
-		deps, ok := args[1].(*object.List)
-		if !ok {
-			return object.NewError(fmt.Errorf("wrong type for second arg, want=string, got=%T", args[1]))
-		}
-		depsStr := []string{}
-		it := deps.Iter()
-		for {
-			dep, ok := it.Next()
-			if !ok {
-				break
-			}
-			depStr, ok := dep.(*object.String)
-			if !ok {
-				return object.NewError(fmt.Errorf("wrong type of dep list, expected all strings (target=%s)", target))
-			}
-			depsStr = append(depsStr, depStr.String())
+		deps, err := validateList[string](args[1])
+		if err != nil {
+			return object.NewError(err)
 		}
 		taskFnObj, ok := args[2].(*object.Function)
 		if !ok {
 			return object.NewError(fmt.Errorf("wrong type for second arg, want=func(bc), got=%T", args[2]))
 		}
-		y.Register(target, depsStr, func(bc yabs.BuildCtx) {
+		y.Register(target, deps, func(bc yabs.BuildCtx) {
 			callFunc, ok := object.GetCallFunc(ctx)
 			if !ok {
 				log.Fatalf("oof")
@@ -87,7 +142,7 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 				log.Fatalf("calling func for target %q: %s", target, err)
 			}
 		})
-		return targetStr
+		return object.NewString(target)
 	}
 }
 
@@ -96,8 +151,6 @@ var red = color.New(color.FgRed).SprintfFunc()
 func main() {
 
 	bs := yabs.New()
-	register := registerFunc(bs)
-	registerBuiltIn := object.NewBuiltin("register", register)
 
 	fileContent, err := os.ReadFile("risor/main.yb")
 	if err != nil {
@@ -106,21 +159,14 @@ func main() {
 
 	ctx := context.Background()
 
-	// Create a Risor proxy for the service
-	// proxy, err := object.NewProxy(svc)
-	// if err != nil {
-	// 	fmt.Println(red(err.Error()))
-	// 	os.Exit(1)
-	// }
-
-	shBuiltin := object.NewBuiltin("sh", sh)
-
 	// Build up options for Risor, including the proxy as a variable named "svc"
 	opts := []risor.Option{
 		risor.WithDefaultBuiltins(),
 		risor.WithBuiltins(map[string]object.Object{
-			"register": registerBuiltIn,
-			"sh":       shBuiltin,
+			"register": object.NewBuiltin("register", registerFunc(bs)),
+			"sh":       object.NewBuiltin("sh", sh),
+			"fs":       object.NewBuiltin("fs", fsFunc(bs)),
+			"go":       object.NewBuiltin("go", goTcFunc(bs)),
 		}),
 	}
 

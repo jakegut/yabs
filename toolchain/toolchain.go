@@ -10,6 +10,22 @@ import (
 	"github.com/jakegut/yabs"
 )
 
+type bs *yabs.Yabs
+
+type Toolchain struct {
+	ybs bs
+}
+
+func New(y *yabs.Yabs) *Toolchain {
+	return &Toolchain{
+		y,
+	}
+}
+
+func (t *Toolchain) Go(version string) string {
+	return Go(t.ybs, version)
+}
+
 func Go(bs *yabs.Yabs, version string) string {
 	goRoot, _ := filepath.Abs(fmt.Sprintf(".yabs/go/%s/go", version))
 	goPath, _ := filepath.Abs(".yabs/go")

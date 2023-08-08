@@ -223,15 +223,12 @@ func (t *Task) cache(y *Yabs, outType OutType) {
 
 	_, err := os.Lstat(loc)
 	if err == nil {
-		t.Out = loc
 		return
 	}
 
 	if err = os.Symlink(t.Out, loc); err != nil {
 		log.Fatalf("creating link: %s", err)
 	}
-
-	t.Out = loc
 }
 
 func isEmptyDir(path string) bool {
@@ -281,7 +278,9 @@ func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
 	if checksum == t.Checksum {
 		t.Dirty = false
 		removeDir(t.Out)
-		t.Out = y.getCacheLoc(t.Checksum)
+		out := y.getCacheLoc(t.Checksum)
+		lk, _ := os.Readlink(out)
+		t.Out = lk
 		return
 	} else {
 		t.Checksum = checksum
@@ -291,6 +290,8 @@ func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
 }
 
 type BuildCtxFunc func(BuildCtx)
+
+//
 
 type Yabs struct {
 	scheduler     *Scheduler
@@ -385,7 +386,11 @@ func (y *Yabs) RestoreTasks() {
 			loc := y.getCacheLoc(rec.Checksum)
 			if _, err := os.Lstat(loc); err == nil {
 				task.Checksum = rec.Checksum
-				task.Out = loc
+				path, err := os.Readlink(loc)
+				if err != nil {
+					log.Fatalf("restoring tasks: %s", err)
+				}
+				task.Out = path
 			}
 		}
 
