@@ -182,6 +182,7 @@ type TaskRecord struct {
 	Name     string
 	Checksum string
 	Deps     []string
+	Time     int64
 }
 
 type Task struct {
@@ -191,6 +192,7 @@ type Task struct {
 	Out      string
 	Checksum string
 	Dirty    bool
+	Time     int64
 }
 
 type OutType int
@@ -298,6 +300,7 @@ type Yabs struct {
 	taskKV        map[string]*Task
 	taskRecordLoc string
 	tmpDir        string
+	time          int64
 }
 
 func (y *Yabs) getTaskRecords() []TaskRecord {
@@ -306,8 +309,12 @@ func (y *Yabs) getTaskRecords() []TaskRecord {
 		if task.Checksum == "" && len(task.Dep) == 0 {
 			continue
 		}
+
 		slices.Sort(task.Dep)
-		taskRecords = append(taskRecords, TaskRecord{Checksum: task.Checksum, Name: name, Deps: task.Dep})
+		if y.scheduler.taskDone[task.Name] && task.Dirty {
+			task.Time = y.time
+		}
+		taskRecords = append(taskRecords, TaskRecord{Checksum: task.Checksum, Name: name, Deps: task.Dep, Time: task.Time})
 	}
 
 	slices.SortFunc(taskRecords, func(a, b TaskRecord) int {
@@ -394,6 +401,11 @@ func (y *Yabs) RestoreTasks() {
 			}
 		}
 
+		task.Time = rec.Time
+		if task.Time > y.time {
+			y.time = task.Time
+		}
+
 		task.Dirty = len(task.Dep) != len(rec.Deps)
 		if !task.Dirty {
 			for i := range rec.Deps {
@@ -471,6 +483,7 @@ func (y *Yabs) Register(name string, deps []string, fn BuildCtxFunc) {
 
 func (y *Yabs) ExecWithDefault(def string) error {
 	y.RestoreTasks()
+	y.time = y.time + 1
 	y.scheduler.Start()
 	if task, ok := y.taskKV[def]; ok {
 		<-y.scheduler.Schedule(task)

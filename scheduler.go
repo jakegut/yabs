@@ -43,11 +43,16 @@ func (s *Scheduler) execTask(t *Task) {
 	}
 
 	dirty := len(tasks) == 0 || t.Dirty
+	maxTime := t.Time
 	for _, task := range tasks {
 		tmpTask := <-task
 		ctx.Dep[tmpTask.Name] = tmpTask.Out
 		dirty = dirty || tmpTask.Dirty
+		if tmpTask.Time > maxTime {
+			maxTime = tmpTask.Time
+		}
 	}
+	dirty = dirty || maxTime > t.Time
 
 	t.Dirty = dirty
 	if dirty {
