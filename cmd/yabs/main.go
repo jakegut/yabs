@@ -139,8 +139,6 @@ func main() {
 		}),
 	}
 
-	//
-
 	if _, err = risor.Eval(ctx, string(fileContent), opts...); err != nil {
 		fmt.Println(red(err.Error()))
 		os.Exit(1)
