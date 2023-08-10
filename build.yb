@@ -8,23 +8,29 @@ register("go_download", [go_tc, go_files], func(bc){
     '{go_bin} mod download' | sh
 })
 
-target_oss := ["windows", "darwin", "linux"].map(func(opsys) {
-    target_os := 'build_{opsys}'
-    register(target_os, [go_files, go_tc, "go_download"], func(bc) {
-        target := opsys
-        go_bin := bc.GetDep(go_tc) + "/" + "go"
-        out_path := 'release/yabs_{target}'
+release_all := []
 
-        'GOOS={target} {go_bin} build -o ../../{out_path} -C cmd/yabs' | sh
+func build_go(goos, goarch) {
+    name := 'release_{goos}_{goarch}'
+    release_all.append(name)
+    register(name, [go_files, go_tc, "go_download"], func(bc) {
+        goos := goos
+        goarch := goarch
+
+        go_bin := bc.GetDep(go_tc) + "/go"
+        out_path := 'release/yabs_{goos}_{goarch}'
+
+        sh('GOOS={goos} GOARCH={goarch} {go_bin} build -o ../../{out_path} -C cmd/yabs')
     })
-    return target_os
-})
+}
 
-register("build_all", target_oss, func (bc) {
-    for _, target_os := range target_oss {
-        print(bc.GetDep(target_os))
+for _, goos := range ["windows", "darwin", "linux"] {
+    for _, goarch := range ["amd64", "arm64"] {
+        build_go(goos, goarch)
     }
-})
+}
+
+register("release", release_all, func (bc) {})
 
 register("build", [go_files, go_tc, "go_download"], func(bc){
     go_bin := bc.GetDep(go_tc) + "/" + "go"
