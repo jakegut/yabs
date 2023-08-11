@@ -1,5 +1,5 @@
-const GH_API_TOKEN = os.getenv("GH_API_TOKEN")
-const auth = 'Bearer {GH_API_TOKEN}'
+const GH_API_TOKEN = os.getenv("GITHUB_TOKEN")
+const auth = 'Bearer {GITHUB_TOKEN}'
 
 func gen_release_notes(tag, owner='jakegut', repo='yabs') {
     url := 'https://api.github.com/repos/{owner}/{repo}/releases/generate-notes'
