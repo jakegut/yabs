@@ -3,7 +3,7 @@ name: main
 on: push
 
 jobs:
-  build:
+  all:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -27,3 +27,7 @@ jobs:
 
       - name: test
         run: yabs test
+
+      - name: release
+        # if: github.ref == 'refs/heads/main'
+        run: yabs release
