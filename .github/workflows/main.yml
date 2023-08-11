@@ -16,6 +16,11 @@ jobs:
       - name: Set up yabs
         run: go install github.com/jakegut/yabs/cmd/yabs@latest
 
+      - name: Cache yabs
+        uses: actions/cache@v3
+        with:
+          path: .yabs
+
       - name: lint
         run: yabs lint
 

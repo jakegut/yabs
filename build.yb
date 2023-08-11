@@ -71,7 +71,7 @@ register("release", archive_all, func(bc) {
     version := string(os.read_file("VERSION"))
     print("creating release for", version)
     // draft := os.getenv("CI") != "true"
-    data := gh.create_release(version, false)
+    data := gh.create_release(version, true)
     id := data["id"]
     for _, bin := range go_archives {
         path := bc.GetDep(bin)
