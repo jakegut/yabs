@@ -18,12 +18,10 @@ register("go_download", [go_tc, go_files], func(bc){
     '{go_bin} mod download' | sh
 })
 
-release_all := []
 archive_all := []
 
 func build_go(goos, goarch) {
     name := 'yabs_{goos}_{goarch}'
-    release_all.append(name)
     register(name, [go_files, go_tc, "go_download"], func(bc) {
         goos := goos
         goarch := goarch
@@ -71,7 +69,11 @@ register("release", archive_all, func(bc) {
     version := string(os.read_file("VERSION"))
     print("creating release for", version)
     draft := os.getenv("CI") != "true"
-    data := gh.create_release(version, draft)
+    data := gh.create_release(version, false)
+    if "message" in data {
+        print(data)
+        return
+    }
     id := data["id"]
     for _, bin := range go_archives {
         path := bc.GetDep(bin)

@@ -1,0 +1,36 @@
+name: main
+
+on: push
+
+jobs:
+  all:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20.5"
+
+      - name: Set up yabs
+        run: go install github.com/jakegut/yabs/cmd/yabs@latest
+
+      - name: Cache yabs
+        uses: actions/cache@v3
+        with:
+          path: .yabs
+          key: yabs-cache
+
+      - name: lint
+        run: yabs lint
+
+      - name: test
+        run: yabs test
+
+      - name: release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: yabs release

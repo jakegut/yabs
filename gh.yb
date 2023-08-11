@@ -1,9 +1,9 @@
-const GH_API_TOKEN = os.getenv("GH_API_TOKEN")
-const auth = 'Bearer {GH_API_TOKEN}'
+const GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+const auth = 'Bearer {GITHUB_TOKEN}'
 
 func gen_release_notes(tag, owner='jakegut', repo='yabs') {
     url := 'https://api.github.com/repos/{owner}/{repo}/releases/generate-notes'
-    fetch(url, {
+    f := fetch(url, {
         method: 'POST',
         headers: {
             'Accept': 'application/vnd.github+json',
@@ -14,7 +14,8 @@ func gen_release_notes(tag, owner='jakegut', repo='yabs') {
             'tag_name': tag,
             'target_commitish': 'main',
         },
-    }).json()
+    })
+    return f.json()
 }
 
 func create_release(tag, draft=false, owner='jakegut', repo='yabs') {
@@ -51,5 +52,6 @@ func upload_release_asset(id, name, body, owner='jakegut', repo='yabs') {
         },
         body: body,
     })
+
     return f.json()
 }
