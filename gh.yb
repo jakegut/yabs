@@ -3,7 +3,7 @@ const auth = 'Bearer {GITHUB_TOKEN}'
 
 func gen_release_notes(tag, owner='jakegut', repo='yabs') {
     url := 'https://api.github.com/repos/{owner}/{repo}/releases/generate-notes'
-    fetch(url, {
+    f := fetch(url, {
         method: 'POST',
         headers: {
             'Accept': 'application/vnd.github+json',
@@ -14,7 +14,9 @@ func gen_release_notes(tag, owner='jakegut', repo='yabs') {
             'tag_name': tag,
             'target_commitish': 'main',
         },
-    }).json()
+    })
+    print(f.text())
+    return f.json()
 }
 
 func create_release(tag, draft=false, owner='jakegut', repo='yabs') {
