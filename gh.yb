@@ -1,4 +1,4 @@
-const GH_API_TOKEN = os.getenv("GITHUB_TOKEN")
+const GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 const auth = 'Bearer {GITHUB_TOKEN}'
 
 func gen_release_notes(tag, owner='jakegut', repo='yabs') {
