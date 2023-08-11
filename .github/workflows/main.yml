@@ -18,9 +18,9 @@ jobs:
 
       - name: Cache yabs
         uses: actions/cache@v3
-        key: yabs-cache
         with:
           path: .yabs
+          key: yabs-cache
 
       - name: lint
         run: yabs lint
