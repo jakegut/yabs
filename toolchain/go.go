@@ -48,7 +48,9 @@ func (g *GoToolchain) download() {
 	g.binLocation = filepath.Join(prefix, "go", "bin")
 
 	if _, err := os.Stat(prefix); os.IsNotExist(err) {
-		os.MkdirAll(prefix, os.ModePerm)
+		if err = os.MkdirAll(prefix, os.ModePerm); err != nil {
+			log.Fatalf("downloading: %s", err)
+		}
 	} else {
 		log.Printf("already have %s", g.version)
 		return

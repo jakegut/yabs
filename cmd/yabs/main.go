@@ -1,17 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
-	"github.com/fatih/color"
 	"github.com/jakegut/yabs"
 	"github.com/jakegut/yabs/toolchain"
-	"github.com/risor-io/risor"
 	"github.com/risor-io/risor/object"
+	"github.com/risor-io/risor/vm"
 )
 
 func fsFunc(y *yabs.Yabs) object.BuiltinFunction {
@@ -33,6 +35,8 @@ func fsFunc(y *yabs.Yabs) object.BuiltinFunction {
 }
 
 // args: command string
+// returns str based on stdout
+// if no stdout => nil, singular line => string, multi-line => list of strings
 func sh(ctx context.Context, args ...object.Object) object.Object {
 	if len(args) != 1 {
 		return object.NewArgsError("sh", 1, len(args))
@@ -44,8 +48,10 @@ func sh(ctx context.Context, args ...object.Object) object.Object {
 	}
 	cmdStr := cmdArg.String()
 
+	var outBuf bytes.Buffer
+
 	cmd := exec.Command("sh", "-c", cmdStr)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = io.MultiWriter(os.Stdout, &outBuf)
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
@@ -55,7 +61,20 @@ func sh(ctx context.Context, args ...object.Object) object.Object {
 	if err := cmd.Wait(); err != nil {
 		return object.Errorf("cmd wait: %s", err)
 	}
-	return object.Nil
+
+	str := outBuf.String()
+	lines := strings.Split(str, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return object.Nil
+	} else if len(lines) == 1 {
+		return object.NewString(lines[0])
+	} else {
+		return object.NewStringList(lines)
+	}
+
 }
 
 func goTcFunc(y *yabs.Yabs) object.BuiltinFunction {
@@ -90,6 +109,16 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 			return object.NewError(fmt.Errorf("wrong type for second arg, want=func(bc), got=%T", args[2]))
 		}
 		y.Register(target, deps, func(bc yabs.BuildCtx) {
+			newVM, ok := ctx.Value(vmFuncKey).(VmFunc)
+			if !ok {
+				log.Fatalf("vm not found")
+			}
+			machine := newVM()
+
+			if err := machine.Run(ctx); err != nil {
+				log.Fatal(err)
+			}
+
 			callFunc, ok := object.GetCallFunc(ctx)
 			if !ok {
 				log.Fatalf("oof")
@@ -109,7 +138,18 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 	}
 }
 
-var red = color.New(color.FgRed).SprintfFunc()
+type contextKey string
+
+const vmFuncKey = contextKey("yabs:vmfunc")
+const registerTargetKey = contextKey("yabs:regsiterTarget")
+
+type VmFunc func() *vm.VirtualMachine
+
+func newVMFunc(code *object.Code, builtins map[string]object.Object) VmFunc {
+	return func() *vm.VirtualMachine {
+		return getVM(code, builtins)
+	}
+}
 
 func main() {
 
@@ -128,20 +168,18 @@ func main() {
 
 	ctx := context.Background()
 
-	// Build up options for Risor, including the proxy as a variable named "svc"
-	opts := []risor.Option{
-		risor.WithDefaultBuiltins(),
-		risor.WithBuiltins(map[string]object.Object{
-			"register": object.NewBuiltin("register", registerFunc(bs)),
-			"sh":       object.NewBuiltin("sh", sh),
-			"fs":       object.NewBuiltin("fs", fsFunc(bs)),
-			"go":       object.NewBuiltin("go", goTcFunc(bs)),
-		}),
+	builtins := getBuiltins(bs)
+
+	code, err := compile(ctx, string(fileContent), builtins)
+	if err != nil {
+		log.Fatalf("compiling: %s", err)
 	}
 
-	if _, err = risor.Eval(ctx, string(fileContent), opts...); err != nil {
-		fmt.Println(red(err.Error()))
-		os.Exit(1)
+	ctx = context.WithValue(ctx, vmFuncKey, newVMFunc(code, builtins))
+	ctx = context.WithValue(ctx, registerTargetKey, "*")
+
+	if err = eval(ctx, code, builtins); err != nil {
+		log.Fatalf("eval: %s", err)
 	}
 
 	if err := bs.ExecWithDefault(defaultTarget); err != nil {

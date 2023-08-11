@@ -4,14 +4,8 @@ go 1.20
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.6.0
-	go.starlark.net v0.0.0-20230721164632-08598ae210f9
 	golang.org/x/exp v0.0.0-20230725093048-515e97ebf090
 	golang.org/x/sync v0.3.0
-)
-
-require (
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.17 // indirect
 )
 
 require (
@@ -69,7 +63,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/wafv2 v1.37.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/xray v1.17.2 // indirect
 	github.com/aws/smithy-go v1.14.1 // indirect
-	github.com/fatih/color v1.15.0
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -80,6 +73,5 @@ require (
 	github.com/risor-io/risor v0.12.1-0.20230810001823-0f4ce6187bba
 	golang.org/x/crypto v0.12.0 // indirect
 	golang.org/x/image v0.11.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
 	golang.org/x/text v0.12.0 // indirect
 )

@@ -76,7 +76,8 @@ func getTmp(loc, prefix string) (string, error) {
 		_, err = os.Stat(path)
 
 		if errors.Is(err, os.ErrNotExist) {
-			return path, nil
+			abs, _ := filepath.Abs(path)
+			return abs, nil
 		}
 		try++
 	}
@@ -208,7 +209,8 @@ func (y *Yabs) getCacheLoc(checksum string) string {
 }
 
 func removeDir(path string) {
-	if !strings.HasPrefix(path, filepath.Join(".yabs", "out")) {
+	abs, _ := filepath.Abs(filepath.Join(".yabs", "out"))
+	if !strings.HasPrefix(path, abs) {
 		log.Fatalf("about to remove a non-out dir: %q", path)
 	}
 
@@ -476,6 +478,10 @@ func (y *Yabs) Prune() {
 }
 
 func (y *Yabs) Register(name string, deps []string, fn BuildCtxFunc) {
+	if _, ok := y.taskKV[name]; ok {
+		return
+	}
+
 	slices.Sort(deps)
 	task := &Task{Dep: deps, Fn: fn, Name: name}
 	y.taskKV[name] = task

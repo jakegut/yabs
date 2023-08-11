@@ -1,6 +1,16 @@
-go_tc := go("go1.20.7")
+import gh
+
+go_tc := go("go1.20.5")
 
 go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
+
+os.setenv("GOLANGCI_LINT_CACHE", os.getenv("GOPATH")+"/.lint_cache")
+
+register("golangci-lint", [go_tc], func(bc) {
+    go_bin := bc.GetDep(go_tc) + "/" + "go"
+    cmd := 'GOBIN={bc.Out} {go_bin} install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.0'
+    sh(cmd)
+})
 
 register("go_download", [go_tc, go_files], func(bc){
     go_bin := bc.GetDep(go_tc) + "/" + "go"
@@ -9,18 +19,35 @@ register("go_download", [go_tc, go_files], func(bc){
 })
 
 release_all := []
+archive_all := []
 
 func build_go(goos, goarch) {
-    name := 'release_{goos}_{goarch}'
+    name := 'yabs_{goos}_{goarch}'
     release_all.append(name)
     register(name, [go_files, go_tc, "go_download"], func(bc) {
         goos := goos
         goarch := goarch
 
         go_bin := bc.GetDep(go_tc) + "/go"
-        out_path := 'release/yabs_{goos}_{goarch}'
 
-        sh('GOOS={goos} GOARCH={goarch} {go_bin} build -o ../../{out_path} -C cmd/yabs')
+        sh('GOOS={goos} GOARCH={goarch} {go_bin} build -o {bc.Out}/yabs -C cmd/yabs')
+    })
+    ext := ".tar.gz"
+    if goos == "windows" {
+        ext = ".zip"
+    }
+    archive_name := name + ext
+    archive_all.append(archive_name)
+    register(archive_name, [name], func(bc) {
+        release_name := name
+        archive_name := archive_name
+        os.mkdir_all(bc.Out)
+        bin := bc.GetDep(release_name)
+        if ext == ".tar.gz" {
+            sh('tar -czvf {bc.Out}/{archive_name} -C {bin} yabs')
+        } else {
+            sh('cd {bin} && zip {bc.Out}/{archive_name} yabs')
+        }
     })
 }
 
@@ -30,10 +57,35 @@ for _, goos := range ["windows", "darwin", "linux"] {
     }
 }
 
-register("release", release_all, func (bc) {})
-
 register("build", [go_files, go_tc, "go_download"], func(bc){
     go_bin := bc.GetDep(go_tc) + "/" + "go"
     '{go_bin} build -o ../../bin/yabs -C cmd/yabs' | sh
 })
 
+
+version := fs("version", ["VERSION"])
+go_archives := archive_all.copy()
+archive_all.append(version)
+
+register("release", archive_all, func(bc) {
+    version := string(os.read_file("VERSION"))
+    print("creating release for", version)
+    draft := os.getenv("CI") != "true"
+    data := gh.create_release(version, draft)
+    id := data["id"]
+    for _, bin := range go_archives {
+        path := bc.GetDep(bin)
+        print("uploading", bin)
+        gh.upload_release_asset(id, bin, os.read_file(path+"/"+bin))
+    }
+})
+
+register("lint", ["golangci-lint", "go_download"], func(bc){
+    lint_bin := bc.GetDep("golangci-lint") + "/golangci-lint"
+    sh('{lint_bin} run')
+})
+
+register("test", [go_tc, "go_download", go_files], func(bc) {
+    go_bin := bc.GetDep(go_tc) + "/go"
+    sh('{go_bin} test ./...')
+})

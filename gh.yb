@@ -1,0 +1,55 @@
+const GH_API_TOKEN = os.getenv("GH_API_TOKEN")
+const auth = 'Bearer {GH_API_TOKEN}'
+
+func gen_release_notes(tag, owner='jakegut', repo='yabs') {
+    url := 'https://api.github.com/repos/{owner}/{repo}/releases/generate-notes'
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Authorization': auth,
+        },
+        data: {
+            'tag_name': tag,
+            'target_commitish': 'main',
+        },
+    }).json()
+}
+
+func create_release(tag, draft=false, owner='jakegut', repo='yabs') {
+    notes := gen_release_notes(tag, owner, repo)
+    url := 'https://api.github.com/repos/{owner}/{repo}/releases'
+    f := fetch(url, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Authorization': auth,
+        },
+        data: {
+            'tag_name': tag,
+            'draft': draft,
+            'make_latest': 'legacy',
+            'name': notes['name'],
+            'body': notes['body'],
+            'target_commitish': 'main',
+        },
+    })
+    return f.json()
+}
+
+func upload_release_asset(id, name, body, owner='jakegut', repo='yabs') {
+    url := 'https://uploads.github.com/repos/{owner}/{repo}/releases/{id}/assets?name={name}'
+    f := fetch(url, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Authorization': auth,
+            "Content-Type": "application/octet-stream"
+        },
+        body: body,
+    })
+    return f.json()
+}

@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-const POOL_SIZE = 5
+const POOL_SIZE = 1
 
 type Scheduler struct {
 	taskQueue map[string][]chan *Task
@@ -56,7 +56,9 @@ func (s *Scheduler) execTask(t *Task) {
 
 	t.Dirty = dirty
 	if dirty {
-		s.sema.Acquire(context.Background(), 1)
+		if err := s.sema.Acquire(context.Background(), 1); err != nil {
+			log.Fatalf("acquiring: %s", err)
+		}
 		log.Printf("running %q", t.Name)
 		t.Fn(ctx)
 		s.sema.Release(1)

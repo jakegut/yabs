@@ -27,7 +27,9 @@ func TestGetTaskRecords(t *testing.T) {
 			name: "one target produces out, no task dep",
 			input: func(y *Yabs) {
 				y.Register("default", []string{}, func(bc BuildCtx) {
-					bc.Run("echo", "hi").StdoutToFile(bc.Out).Exec()
+					if err := bc.Run("echo", "hi").StdoutToFile(bc.Out).Exec(); err != nil {
+						t.Fatal(err)
+					}
 				})
 			},
 			final: []TaskRecord{{Name: "default", Checksum: hiChecksum}},
@@ -36,7 +38,9 @@ func TestGetTaskRecords(t *testing.T) {
 			name: "two targets",
 			input: func(y *Yabs) {
 				y.Register("echo", []string{}, func(bc BuildCtx) {
-					bc.Run("echo", "hi").StdoutToFile(bc.Out).Exec()
+					if err := bc.Run("echo", "hi").StdoutToFile(bc.Out).Exec(); err != nil {
+						t.Fatal(err)
+					}
 				})
 				y.Register("default", []string{"echo"}, func(bc BuildCtx) {})
 			},
