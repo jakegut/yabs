@@ -30,7 +30,7 @@ jobs:
         run: yabs test
 
       - name: release
-        # if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yabs release

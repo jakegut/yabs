@@ -15,7 +15,6 @@ func gen_release_notes(tag, owner='jakegut', repo='yabs') {
             'target_commitish': 'main',
         },
     })
-    print(f.text())
     return f.json()
 }
 
@@ -53,5 +52,6 @@ func upload_release_asset(id, name, body, owner='jakegut', repo='yabs') {
         },
         body: body,
     })
+
     return f.json()
 }
