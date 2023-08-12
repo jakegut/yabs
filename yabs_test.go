@@ -1,7 +1,6 @@
 package yabs
 
 import (
-	"fmt"
 	"testing"
 
 	"golang.org/x/exp/slices"
@@ -61,8 +60,6 @@ func TestGetTaskRecords(t *testing.T) {
 			} else {
 				t.Fatalf("%q task not found", "default")
 			}
-
-			fmt.Println("minor test change")
 
 			if !compareTaskRecSlice(tt.final, y.getTaskRecords()) {
 				t.Fatalf("got two different []TaskRecord\n\t*got =%+v\n\t*want=%+v", tt.final, y.getTaskRecords())

@@ -1,81 +1,92 @@
-# yabs-poc
+# yabs
 
-proof of concept for [y]et [a]nother [b]uild [s]ystem
+[y]et [a]nother [b]uild [s]ystem
+
+a build system, configurable in [risor](https://github.com/risor-io/risor), a go-like scripting language
 
 ## Installation
 
-*Not yet published*
-
-`go get github.com/jakegut/yabs-poc`
+`go install github.com/jakegut/yabs@latest`
 
 ## Usage
 
+Make a `build.yb` file at the root of your project with the logic for your builds
+
 ```go
-bs := yabs.New()
-
-// create a target given a name, list of dependencies, and a task function
-bs.Register("target", []string{}, func(bc yabs.BuildCtx) {
-    if err := bc.Run("echo", "hello world").Exec(); err != nil {
-        log.Fatal("whoopsies")
-    }
+register('hello', [], func(bc) {
+    sh("echo 'hello world!'")
 })
-
-if err := bs.ExecWithDefault("target"); err != nil {
-    log.Fatal(err)
-}
 ```
 
-### Build Go binaries
+```
+> yabs hello
+2023/08/11 20:22:12 running "hello"
+hello world!
+```
+
+### Build Multiple Go Binaries
 
 ```go
-bs := yabs.New()
+// use a go toolchain with a specific version, returns the name of the target
+go_tc := go("go1.20.5")
 
-// Use a consistent Go toolchain that doesn't rely on the host
-goTc := toolchain.Go(bs, "go1.20.7")
+// depend on files using `fs(name, list of globs)`, returns the name of the target
+go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
 
-// create a target based on a set of files given name and a list of globs
-// Glob format: https://github.com/bmatcuk/doublestar#patterns
-fileDeps := yabs.Fs(bs, "go_files", []string{"go.mod", "go.sum", "**/*.go"})
+// create a target `register(name, list of deps, task func)`
+register("go_download", [go_tc, go_files], func(bc){
+    go_bin := bc.GetDep(go_tc) + "/go"
 
-oss := []string{"windows", "linux", "darwin"}
-goBuildTargets := []string{}
-for _, targetOS := range oss {
-    targetOS := targetOS
-    target := fmt.Sprintf("build_%s", targetOS)
-    goBuildTargets = append(goBuildTargets, target)
-
-    bs.Register(target, []string{fileDeps}, func(bc yabs.BuildCtx) {
-        // output from dependencies are avaliable via the `BuildCtx.Dep` map
-        // outputs are symlinks from `.yabs/cache/...` to `.yabs/out/...`
-        goFiles, _ := os.Readlink(bc.Dep[fileDeps])
-
-        goBinLoc, _ := os.Readlink(bc.Dep[goTc])
-        goBin := filepath.Join(goBinLoc, "go")
-
-        // Store any outputs from a task with the `BuildCtx.Out` path which will be cached
-        // by yabs, directories and files are supported
-        err = bc.Run(goBin, "build", "-o", bc.Out, filepath.Join(goFiles, "main.go")).
-            WithEnv("GOOS", targetOS).
-            Exec()
-        if err != nil {
-            log.Fatal(err)
-        }
-    })
-}
-
-bs.Register("release", goBuildTargets, func(bc yabs.BuildCtx) {
-    fmt.Println("releasing...")
-    for name, dep := range bc.Dep {
-        fmt.Println(name, dep)
-    }
+    sh('{go_bin} mod download')
 })
 
-if err := bs.ExecWithDefault("release"); err != nil {
-    log.Fatal(err)
+build_all := []
+
+for _, goos := range ["windows", "darwin", "linux"] {
+    for _, goarch := range ["amd64", "arm64"] {
+        name := 'build_{goos}_{goarch}'
+        build_all.append(name)
+        register(name, [go_tc, go_files, "go_download"], func(bc) {
+            goos := goos
+            goarch := goarch
+            
+            go_bin := bc.GetDep(go_tc) + "/go"
+
+            // Put any outputs in bc.Out to cache them with yabs
+            sh('GOOS={goos} GOARCH={goarch} {go_bin} build -o {bc.Out} .')
+        })
+    }
 }
 
-// Only cache outputs from the previous build
-bs.Prune()
+register("build_all", build_all, func(bc) {
+    for _, build := range build_all {
+        // direct dependencies' outputs are available at `bc.GetDep(target)`
+        bin_loc := bc.GetDep(build)
+        print(build, bin_loc)
+    }
+})
+```
+
+```
+> yabs build_all
+2023/08/11 20:33:15 running "go_files"
+2023/08/11 20:33:15 running "go1.20.5"
+2023/08/11 20:33:15 downloading "go1.20.5" from https://go.dev/dl/go1.20.5.linux-amd64.tar.gz
+2023/08/11 20:33:15 extracting tar.gz
+2023/08/11 20:33:19 running "go_download"
+2023/08/11 20:33:23 running "build_linux_arm64"
+2023/08/11 20:33:26 running "build_linux_amd64"
+2023/08/11 20:33:26 running "build_windows_arm64"
+2023/08/11 20:33:27 running "build_darwin_amd64"
+2023/08/11 20:33:27 running "build_darwin_arm64"
+2023/08/11 20:33:27 running "build_windows_amd64"
+2023/08/11 20:33:28 running "build_all"
+build_windows_amd64 /abs/path/to/project/.yabs/out/yabs-out-650635068
+build_windows_arm64 /abs/path/to/project/.yabs/out/yabs-out-3597857295
+build_darwin_amd64 /abs/path/to/project/.yabs/out/yabs-out-3821563234
+build_darwin_arm64 /abs/path/to/project/.yabs/out/yabs-out-2023236471
+build_linux_amd64 /abs/path/to/project/.yabs/out/yabs-out-2379893467
+build_linux_arm64 /abs/path/to/project/.yabs/out/yabs-out-1121798096
 ```
 
 ## Design

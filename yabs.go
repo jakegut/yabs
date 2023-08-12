@@ -238,6 +238,9 @@ func (t *Task) cache(y *Yabs, outType OutType) {
 func isEmptyDir(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
 		log.Fatalf("isEmptyDir: %s", err)
 	}
 	defer f.Close()
@@ -433,6 +436,10 @@ func (y *Yabs) Prune() {
 		if err != nil {
 			log.Fatalf("prune: %s", err)
 		}
+		if filepath.IsAbs(path) {
+			wd, _ := os.Getwd()
+			path, _ = filepath.Rel(wd, path)
+		}
 		validOuts[path] = true
 	}
 
@@ -498,4 +505,12 @@ func (y *Yabs) ExecWithDefault(def string) error {
 	}
 	y.SaveTasks()
 	return nil
+}
+
+func (y *Yabs) GetTaskNames() []string {
+	names := []string{}
+	for name := range y.taskKV {
+		names = append(names, name)
+	}
+	return names
 }
