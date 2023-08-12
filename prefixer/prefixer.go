@@ -11,22 +11,25 @@ import (
 	"github.com/fatih/color"
 )
 
+var rint = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 type Prefixer struct {
 	prefix string
 	color  color.Attribute
+	writer io.Writer
 }
 
 var _ io.Writer = Prefixer{}
 
-func New(prefix string) Prefixer {
-	rand.Seed(time.Now().UnixNano())
+func New(prefix string, writer io.Writer) Prefixer {
 	min := int(color.FgBlack)
 	max := int(color.FgWhite)
-	col := color.Attribute(rand.Intn(max-min+1) + min)
+	col := color.Attribute(rint.Intn(max-min+1) + min)
 
 	return Prefixer{
 		prefix: prefix,
 		color:  col,
+		writer: writer,
 	}
 }
 
@@ -36,12 +39,12 @@ func (p Prefixer) Write(bs []byte) (int, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Printf("[")
-		_, err := color.New(p.color).Print(p.prefix)
+		fmt.Fprintf(p.writer, "[")
+		_, err := color.New(p.color).Fprint(p.writer, p.prefix)
 		if err != nil {
 			return 0, err
 		}
-		_, err = fmt.Printf("] %s\n", line)
+		_, err = fmt.Fprintf(p.writer, "] %s\n", line)
 		if err != nil {
 			return 0, err
 		}

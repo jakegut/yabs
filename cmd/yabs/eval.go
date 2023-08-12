@@ -73,13 +73,15 @@ func sh(ctx context.Context, args ...object.Object) object.Object {
 	var outBuf bytes.Buffer
 
 	var stdout io.Writer = &outBuf
+	var stderr io.Writer = os.Stderr
 	if targetName, ok := ctx.Value(targetNameKey).(string); ok {
-		stdout = io.MultiWriter(prefixer.New(targetName), &outBuf)
+		stdout = io.MultiWriter(prefixer.New(targetName, os.Stdout), &outBuf)
+		stderr = prefixer.New(targetName, os.Stderr)
 	}
 
 	cmd := exec.Command("sh", "-c", cmdStr)
 	cmd.Stdout = stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = stderr
 	cmd.Env = os.Environ()
 
 	if err := cmd.Start(); err != nil {
