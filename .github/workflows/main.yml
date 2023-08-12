@@ -38,5 +38,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yabs release
 
-      - name: prune
-        run: yabs prune
+      # - name: prune
+      #   run: yabs prune
