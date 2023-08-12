@@ -16,12 +16,15 @@ jobs:
 
       - name: Set up yabs
         run: go install github.com/jakegut/yabs/cmd/yabs@latest
-
+        # https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+        # Use a more aggressive caching key
       - name: Cache yabs
         uses: actions/cache@v3
         with:
           path: .yabs
-          key: yabs-cache
+          key: yabs-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            yabs-cache-${{ runner.os }}
 
       - name: lint
         run: yabs lint
@@ -34,3 +37,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yabs release
+
+      - name: prune
+        run: yabs prune
