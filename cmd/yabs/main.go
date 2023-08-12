@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/pprof"
 
 	"github.com/jakegut/yabs"
 	"github.com/urfave/cli/v2"
@@ -76,6 +77,7 @@ VERSION:
    {{end}}
 `, availableTargets)
 
+	var profile bool
 	app := &cli.App{
 		EnableBashCompletion: true,
 		Usage:                "yet another build system",
@@ -91,11 +93,29 @@ VERSION:
 				},
 			},
 		},
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:        "cpuprofile",
+				Value:       false,
+				Usage:       "profile usage to `yabs.prof`",
+				Destination: &profile,
+			},
+		},
 		Action: func(cCtx *cli.Context) error {
 			target := "build"
 			if cCtx.NArg() > 0 {
 				target = cCtx.Args().Get(0)
 			}
+
+			if profile {
+				f, err := os.Create("yabs.prof")
+				if err != nil {
+					log.Fatal(err)
+				}
+				pprof.StartCPUProfile(f)
+				defer pprof.StopCPUProfile()
+			}
+
 			return bs.ExecWithDefault(target)
 		},
 		BashComplete: func(ctx *cli.Context) {

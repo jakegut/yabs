@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jakegut/yabs"
+	"github.com/jakegut/yabs/prefixer"
 	"github.com/jakegut/yabs/toolchain"
 	"github.com/risor-io/risor/builtins"
 	"github.com/risor-io/risor/compiler"
@@ -71,8 +72,13 @@ func sh(ctx context.Context, args ...object.Object) object.Object {
 
 	var outBuf bytes.Buffer
 
+	var stdout io.Writer = &outBuf
+	if targetName, ok := ctx.Value(targetNameKey).(string); ok {
+		stdout = io.MultiWriter(prefixer.New(targetName), &outBuf)
+	}
+
 	cmd := exec.Command("sh", "-c", cmdStr)
-	cmd.Stdout = io.MultiWriter(os.Stdout, &outBuf)
+	cmd.Stdout = stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
@@ -140,17 +146,19 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 				log.Fatal(err)
 			}
 
-			callFunc, ok := object.GetCallFunc(ctx)
-			if !ok {
-				log.Fatalf("oof")
-			}
+			// callFunc, ok := object.GetCallFunc(ctx)
+			// if !ok {
+			// 	log.Fatalf("oof")
+			// }
 
 			bcProxy, err := object.NewProxy(&bc)
 			if err != nil {
 				log.Fatalf("creating new proxy; %s", err)
 			}
 
-			_, err = callFunc(ctx, taskFnObj, []object.Object{bcProxy})
+			ctx = context.WithValue(ctx, targetNameKey, target)
+
+			_, err = machine.CallFunction(ctx, taskFnObj, []object.Object{bcProxy})
 			if err != nil {
 				log.Fatalf("calling func for target %q: %s", target, err)
 			}
@@ -162,6 +170,8 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 type contextKey string
 
 const vmFuncKey = contextKey("yabs:vmfunc")
+
+const targetNameKey = contextKey("yabs:targetname")
 
 type VmFunc func() *vm.VirtualMachine
 
