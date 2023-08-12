@@ -6,7 +6,7 @@ a build system, configurable in [risor](https://github.com/risor-io/risor), a go
 
 ## Installation
 
-`go install github.com/jakegut/yabs@latest`
+`go install github.com/jakegut/yabs/cmd/yabs@latest`
 
 ## Usage
 
