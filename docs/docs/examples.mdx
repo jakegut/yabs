@@ -1,5 +1,14 @@
+---
+sidebar_position: 3
+---
+
+# Examples
+
+## Build Multiple Go Binaries
+
+```go
 // use a go toolchain with a specific version, returns the name of the target
-go_tc := go("go1.20.5")
+go_tc := go("go1.20.7")
 
 // depend on files using `fs(name, list of globs)`, returns the name of the target
 go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
@@ -31,8 +40,31 @@ for _, goos := range ["windows", "darwin", "linux"] {
 
 register("build_all", build_all, func(bc) {
     for _, build := range build_all {
-        // direct dependencies' outputs are available at `bc.GetDep(target)``
+        // direct dependencies' outputs are available at `bc.GetDep(target)`
         bin_loc := bc.GetDep(build)
         print(build, bin_loc)
     }
 })
+```
+
+## Run `golangci-lint`
+
+```go
+go_tc := go("go1.20.7")
+
+go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
+
+os.setenv("GOLANGCI_LINT_CACHE", os.getenv("GOPATH")+"/.lint_cache")
+
+register("golangci-lint", [go_tc], func(bc) {
+    go_bin := bc.GetDep(go_tc) + "/go"
+    cmd := 'GOBIN={bc.Out} {go_bin} install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.0'
+    sh(cmd)
+})
+
+register("lint", ["golangci-lint", go_tc], func(bc){
+    lint_bin := bc.GetDep("golangci-lint") + "/golangci-lint"
+
+    sh('PATH={bc.GetDep(go_tc)} {lint_bin} run')
+})
+```

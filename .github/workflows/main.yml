@@ -1,6 +1,9 @@
 name: main
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - "docs/**"
 
 jobs:
   all:
