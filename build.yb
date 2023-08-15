@@ -1,34 +1,34 @@
 import gh
 
-go_tc := go("go1.20.5")
+go_tc := go("go1.20.7")
 
 go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
 
 os.setenv("GOLANGCI_LINT_CACHE", os.getenv("GOPATH")+"/.lint_cache")
 
 register("golangci-lint", [go_tc], func(bc) {
-    go_bin := bc.GetDep(go_tc) + "/" + "go"
-    cmd := 'GOBIN={bc.Out} {go_bin} install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.0'
+    cmd := 'GOBIN={bc.Out} go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.0'
     sh(cmd)
 })
 
 register("go_download", [go_tc, go_files], func(bc){
-    go_bin := bc.GetDep(go_tc) + "/" + "go"
-
-    sh('{go_bin} mod download')
+    sh('go mod download')
 })
 
 archive_all := []
 
 func build_go(goos, goarch) {
     name := 'yabs_{goos}_{goarch}'
+    bin_name := "yabs"
+    if goos == "windows" {
+        bin_name += ".exe"
+    }
     register(name, [go_files, go_tc, "go_download"], func(bc) {
         goos := goos
         goarch := goarch
+        bin_name := bin_name
 
-        go_bin := bc.GetDep(go_tc) + "/go"
-
-        sh('GOOS={goos} GOARCH={goarch} {go_bin} build -o {bc.Out}/yabs -C cmd/yabs')
+        sh('GOOS={goos} GOARCH={goarch} go build -o {bc.Out}/{bin_name} -C cmd/yabs')
     })
     ext := ".tar.gz"
     if goos == "windows" {
@@ -41,10 +41,12 @@ func build_go(goos, goarch) {
         archive_name := archive_name
         os.mkdir_all(bc.Out)
         bin := bc.GetDep(release_name)
+        bin_name := bin_name
+
         if ext == ".tar.gz" {
-            sh('tar -czvf {bc.Out}/{archive_name} -C {bin} yabs')
+            sh('tar -czvf {bc.Out}/{archive_name} -C {bin} {bin_name}')
         } else {
-            sh('cd {bin} && zip {bc.Out}/{archive_name} yabs')
+            sh('cd {bin} && zip {bc.Out}/{archive_name} {bin_name}')
         }
     })
 }
@@ -56,8 +58,7 @@ for _, goos := range ["windows", "darwin", "linux"] {
 }
 
 register("build", [go_files, go_tc, "go_download"], func(bc){
-    go_bin := bc.GetDep(go_tc) + "/" + "go"
-    '{go_bin} build -o ../../bin/yabs -C cmd/yabs' | sh
+    'go build -o ../../bin/yabs -C cmd/yabs' | sh
 })
 
 
@@ -84,12 +85,11 @@ register("release", archive_all, func(bc) {
 
 register("lint", ["golangci-lint", "go_download", go_tc], func(bc){
     lint_bin := bc.GetDep("golangci-lint") + "/golangci-lint"
-    sh('PATH={bc.GetDep(go_tc)} {lint_bin} run')
+    sh('PATH={bc.GetDep(go_tc)} {lint_bin} run ./...')
 })
 
 register("test", [go_tc, "go_download", go_files], func(bc) {
-    go_bin := bc.GetDep(go_tc) + "/go"
-    sh('{go_bin} test ./...')
+    sh('go test ./...')
 })
 
 register("docs", [], func(bc) {

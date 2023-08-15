@@ -34,9 +34,8 @@ func Go(bs *yabs.Yabs, version string) string {
 	os.Setenv("GOROOT", goRoot)
 	os.Setenv("GOPATH", goPath)
 	os.Setenv("GOCACHE", goCache)
-	os.Setenv("CGO_ENABLED", "0")
 	path := os.Getenv("PATH")
-	os.Setenv("PATH", path+":"+filepath.Join(goRoot, "bin"))
+	os.Setenv("PATH", filepath.Join(goRoot, "bin")+":"+path)
 
 	bs.Register(version, []string{}, func(bc yabs.BuildCtx) {
 		tc := newGo(version)
