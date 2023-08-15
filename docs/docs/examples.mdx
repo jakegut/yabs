@@ -15,9 +15,7 @@ go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
 
 // create a target `register(name, list of deps, task func)`
 register("go_download", [go_tc, go_files], func(bc){
-    go_bin := bc.GetDep(go_tc) + "/go"
-
-    sh('{go_bin} mod download')
+    sh('go mod download')
 })
 
 build_all := []
@@ -29,11 +27,9 @@ for _, goos := range ["windows", "darwin", "linux"] {
         register(name, [go_tc, go_files, "go_download"], func(bc) {
             goos := goos
             goarch := goarch
-            
-            go_bin := bc.GetDep(go_tc) + "/go"
 
             // Put any outputs in bc.Out to cache them with yabs
-            sh('GOOS={goos} GOARCH={goarch} {go_bin} build -o {bc.Out} .')
+            sh('GOOS={goos} GOARCH={goarch} go build -o {bc.Out} .')
         })
     }
 }
@@ -57,8 +53,7 @@ go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
 os.setenv("GOLANGCI_LINT_CACHE", os.getenv("GOPATH")+"/.lint_cache")
 
 register("golangci-lint", [go_tc], func(bc) {
-    go_bin := bc.GetDep(go_tc) + "/go"
-    cmd := 'GOBIN={bc.Out} {go_bin} install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.0'
+    cmd := 'GOBIN={bc.Out} go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.0'
     sh(cmd)
 })
 

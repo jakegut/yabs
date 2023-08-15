@@ -37,10 +37,10 @@ sh('echo "run any command in here as if it was shell!"')
 ### `go`
 
 Download and install a `go` toolchain specified by the version. The toolchain will be download in the project's `.yabs/go/<version>` directory.
-The `GOROOT` and `GOPATH` environment variables will be set to be within the `.yabs/go` directory. The `PATH` env var will be modified to include the toolchain's `bin` directory.
+The `GOROOT` and `GOPATH` environment variables will be set to be within the `.yabs/go` directory. The `PATH` env var will be modified to include the toolchain's `bin` directory, the `PATH` will be updated so that `go` will appear first.
 
 
-While the `PATH` is modified, it will be good practice to get the path of the `go` or `gofmt` binaries directory by using `BuildCtx.GetDep(target)`.
+While the `PATH` is modified, it will be good practice to get the path of the `go` or `gofmt` binaries directory by using `BuildCtx.GetDep(target)`. Especially if you're using multiple `go` toolchains.
 
 ```go
 /*
@@ -51,8 +51,7 @@ the `go` and `gofmt` binaries are available in its' out directory
 go_tc := go("1.20.7")
 
 register("env", [go_tc], func(bc) {
-    go_bin := bc.GetDep(go_tc) + "/go"
-    sh('{go_bin} env')
+    sh('go env')
 })
 ```
 
