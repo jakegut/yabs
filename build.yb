@@ -95,15 +95,15 @@ register("test", [go_tc, "go_download", go_files], func(bc) {
 })
 
 register("npm_install", [node_tc], func(bc){
-    sh("cd docs && npm install")
-})
-
-register("docs", ["npm_install"], func(bc) {
-    arg := "start"
+    arg := "install"
     if os.getenv("CI") == "true" {
         arg = "ci"
     }
-    sh('cd docs && npm {arg}')
+    sh("cd docs && npm {arg}")
+})
+
+register("docs", ["npm_install"], func(bc) {
+    sh('cd docs && npm start')
 })
 
 docs_files := fs("docs_files", ["docs/**/*"], ["docs/node_modules/**/*", "docs/.docusaurus/**/*"])
