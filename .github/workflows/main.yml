@@ -26,6 +26,7 @@ jobs:
           pathInArchive: "yabs"
           repo: "jakegut/yabs"
           version: "v0.4.1"
+          includePrereleases: true
           urlTemplate: "https://github.com/jakegut/yabs/releases/download/{{version}}/yabs_linux_amd64.tar.gz"
           token: ${{ secrets.GITHUB_TOKEN }}
 
