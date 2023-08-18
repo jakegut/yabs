@@ -97,15 +97,26 @@ func (y *Yabs) newTmpOut() (string, error) {
 }
 
 func getFileChecksum(path string) ([]byte, error) {
+	st, err := os.Lstat(path)
+	if err != nil {
+		log.Fatalf("file checksum: %s", err)
+	}
+	if st.Mode()&fs.ModeSymlink != 0 {
+		lk, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			log.Fatalf("file checksum: %s", err)
+		}
+		return getFileChecksum(lk)
+	}
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open file: %s", err)
+		return nil, fmt.Errorf("file checksum: %s", err)
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return nil, fmt.Errorf("io copy: %s", err)
+		return nil, fmt.Errorf("file checksum: %s", err)
 	}
 
 	return h.Sum(nil), nil

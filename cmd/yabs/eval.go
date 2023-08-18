@@ -119,6 +119,19 @@ func goTcFunc(y *yabs.Yabs) object.BuiltinFunction {
 	}
 }
 
+func nodeTcFunc(y *yabs.Yabs) object.BuiltinFunction {
+	return func(ctx context.Context, args ...object.Object) object.Object {
+		if len(args) != 1 {
+			return object.NewArgsError("node", 1, len(args))
+		}
+		version, err := validateString(args[0])
+		if err != nil {
+			object.NewError(err)
+		}
+		return object.NewString(toolchain.Node(y, version))
+	}
+}
+
 func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 	// args: name string, deps []string, task func(bc BuildCtx)
 	return func(ctx context.Context, args ...object.Object) object.Object {
@@ -204,6 +217,7 @@ func getBuiltins(bs *yabs.Yabs) map[string]object.Object {
 		"sh":       object.NewBuiltin("sh", sh),
 		"fs":       object.NewBuiltin("fs", fsFunc(bs)),
 		"go":       object.NewBuiltin("go", goTcFunc(bs)),
+		"node":     object.NewBuiltin("node", nodeTcFunc(bs)),
 	}
 	if awsMod := modAws.Module(); awsMod != nil {
 		allBuiltins["aws"] = awsMod

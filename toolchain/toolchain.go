@@ -2,7 +2,6 @@ package toolchain
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -27,35 +26,74 @@ func (t *Toolchain) Go(version string) string {
 }
 
 func Go(bs *yabs.Yabs, version string) string {
-	goRoot, _ := filepath.Abs(fmt.Sprintf(".yabs/go/%s/go", version))
-	goPath, _ := filepath.Abs(".yabs/go")
-	goCache, _ := filepath.Abs(".yabs/go/go-build")
+	goRoot, _ := filepath.Abs(filepath.Join(".yabs", "go", version, "go"))
+	goPath, _ := filepath.Abs(filepath.Join(".yabs", "go"))
+	goCache, _ := filepath.Abs(filepath.Join(".yabs", "go", "go-build"))
 
+	goBinPath, _ := filepath.Abs(filepath.Join(goRoot, "bin"))
 	os.Setenv("GOROOT", goRoot)
 	os.Setenv("GOPATH", goPath)
 	os.Setenv("GOCACHE", goCache)
 	path := os.Getenv("PATH")
-	os.Setenv("PATH", filepath.Join(goRoot, "bin")+":"+path)
+	os.Setenv("PATH", goBinPath+":"+path)
 
-	bs.Register(version, []string{}, func(bc yabs.BuildCtx) {
-		tc := newGo(version)
-		tc.download()
+	tp := ToolchainProvider{
+		Type:    "go",
+		Version: version,
+		BinLoc:  []string{"go", "bin"},
+		DownloadURL: func(tp ToolchainProvider) string {
+			os := runtime.GOOS
+			arch := runtime.GOARCH
 
-		if err := os.Mkdir(bc.Out, os.ModePerm); err != nil {
-			log.Fatal(err)
-		}
-
-		bins := []string{"go", "gofmt"}
-
-		for _, bin := range bins {
-			if runtime.GOOS == "windows" {
-				bin += ".exe"
+			archiveExt := "tar.gz"
+			if os == "windows" {
+				archiveExt = "zip"
 			}
-			if err := os.Link(filepath.Join(tc.binLocation, bin), filepath.Join(bc.Out, bin)); err != nil {
-				log.Fatal(err)
-			}
-		}
-	})
 
-	return version
+			return fmt.Sprintf("https://go.dev/dl/%s.%s-%s.%s", version, os, arch, archiveExt)
+		},
+	}
+
+	tp.Register(bs)
+
+	return tp.GetTargetName()
+}
+
+func Node(bs *yabs.Yabs, version string) string {
+
+	arch := runtime.GOARCH
+	if arch == "amd64" {
+		arch = "x64"
+	}
+
+	goos := runtime.GOOS
+	ext := "tar.gz"
+	if goos == "windows" {
+		goos = "win"
+		ext = "zip"
+	}
+
+	fileName := fmt.Sprintf("node-%s-%s-%s", version, goos, arch)
+
+	tp := ToolchainProvider{
+		Type:    "node",
+		Version: version,
+		BinLoc:  []string{fileName, "bin"},
+		DownloadURL: func(tp ToolchainProvider) string {
+			// https://nodejs.org/dist/v18.17.1/node-v18.17.1-linux-arm64.tar.xz
+			return fmt.Sprintf("https://nodejs.org/dist/%s/%s.%s", version, fileName, ext)
+		},
+	}
+
+	bin := filepath.Join(tp.BinLoc...)
+	nodeBinAbs, _ := filepath.Abs(filepath.Join(tp.getPrefix(), bin))
+	npmCacheAbs, _ := filepath.Abs(filepath.Join(".yabs", "node", ".npm_cache"))
+
+	path := os.Getenv("PATH")
+	os.Setenv("PATH", nodeBinAbs+":"+path)
+	os.Setenv("npm_config_cache", npmCacheAbs)
+
+	tp.Register(bs)
+
+	return tp.GetTargetName()
 }
