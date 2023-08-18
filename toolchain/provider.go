@@ -42,7 +42,9 @@ func (tp ToolchainProvider) GetTargetName() string {
 func (tp ToolchainProvider) Register(y *yabs.Yabs) {
 	name := tp.GetTargetName()
 	y.Register(name, []string{}, func(bc yabs.BuildCtx) {
-		tp.Download()
+		if err := tp.Download(); err != nil {
+			log.Fatal(err)
+		}
 
 		if err := os.Mkdir(bc.Out, os.ModePerm); err != nil {
 			log.Fatal(err)
@@ -50,7 +52,7 @@ func (tp ToolchainProvider) Register(y *yabs.Yabs) {
 
 		binLoc := filepath.Join(append([]string{tp.getPrefix()}, tp.BinLoc...)...)
 
-		if err := filepath.WalkDir(binLoc, func(path string, d fs.DirEntry, err error) error {
+		if err := filepath.WalkDir(binLoc, func(path string, d fs.DirEntry, _ error) error {
 			rel, err := filepath.Rel(binLoc, path)
 			if err != nil {
 				return fmt.Errorf("rel: %s", err)
@@ -80,7 +82,9 @@ func (tp ToolchainProvider) Register(y *yabs.Yabs) {
 					return err
 				}
 			} else {
-				os.MkdirAll(loc, os.ModePerm)
+				if err := os.MkdirAll(loc, os.ModePerm); err != nil {
+					log.Fatal(err)
+				}
 			}
 			return nil
 		}); err != nil {
