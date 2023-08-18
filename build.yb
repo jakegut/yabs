@@ -99,7 +99,7 @@ register("npm_install", [node_tc], func(bc){
     if os.getenv("CI") == "true" {
         arg = "ci"
     }
-    sh("cd docs && npm {arg}")
+    sh('cd docs && npm {arg}')
 })
 
 register("docs", ["npm_install"], func(bc) {
