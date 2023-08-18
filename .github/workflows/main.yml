@@ -3,7 +3,6 @@ name: main
 on:
   push:
     paths-ignore:
-      - "docs/**"
       - ".github/workflows/docs.yml"
 
 jobs:
@@ -53,7 +52,6 @@ jobs:
         run: yabs release
 
       - name: Build Docs
-        env:
         run: yabs docs_build
 
       - name: prune
