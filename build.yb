@@ -2,7 +2,7 @@ import gh
 
 go_tc := go("go1.20.7")
 
-// node_tc := node("v20.5.1")
+node_tc := node("v20.5.1")
 
 go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
 
@@ -94,26 +94,27 @@ register("test", [go_tc, "go_download", go_files], func(bc) {
     sh('go test ./...')
 })
 
-// register("npm_install", [node_tc], func(bc){
-//     os.mkdir_all(bc.Out + "/node_modules")
-//     sh("cd docs && npm install")
-// })
+register("npm_install", [node_tc], func(bc){
+    sh("cd docs && npm install")
+})
 
-// register("docs", ["npm_install"], func(bc) {
-//     sh('cd docs && npm start')
-// })
+register("docs", ["npm_install"], func(bc) {
+    arg := "start"
+    if os.getenv("CI") == "true" {
+        arg = "ci"
+    }
+    sh('cd docs && npm {arg}')
+})
 
-// register("docs_build", ["npm_install"], func(bc){
-//     sh('cd docs && npm run build')
-// })
+docs_files := fs("docs_files", ["docs/**/*"], ["docs/node_modules/**/*", "docs/.docusaurus/**/*"])
 
-// register("node", [node_tc], func(bc) {
-//     sh('node --version')
-//     sh('which node')
-//     sh('npm --version')
-//     sh('which npm')
-// })
+register("docs_build", ["npm_install", docs_files], func(bc){
+    sh('cd docs && npm run build')
+})
 
-// register("npm_cache", [node_tc], func(bc) {
-//     sh('npm config get cache')
-// })
+register("node", [node_tc], func(bc) {
+    sh('node --version')
+    sh('which node')
+    sh('npm --version')
+    sh('which npm')
+})

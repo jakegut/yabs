@@ -52,5 +52,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yabs release
 
+      - name: docs_build
+        env:
+        run: yabs build
+
       - name: prune
         run: yabs prune
