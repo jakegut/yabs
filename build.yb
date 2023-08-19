@@ -106,9 +106,12 @@ register("docs", ["npm_install"], func(bc) {
     sh('cd docs && npm start')
 })
 
-docs_files := fs("docs_files", ["docs/**/*"], ["docs/node_modules/**/*", "docs/.docusaurus/**/*"])
+docs_files := fs("docs_files", ["docs/**/*"], ["docs/node_modules/**/*", "docs/.docusaurus/**/*", "docs/build/*/**"])
 
 register("docs_build", ["npm_install", docs_files], func(bc){
+    if os.getenv("GITHUB_OUTPUT") != "" {
+        sh('echo "BUILD_DOCS=true" >> {os.getenv("GITHUB_OUTPUT")}')
+    }
     sh('cd docs && npm run build')
 })
 
