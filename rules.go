@@ -10,7 +10,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-func Fs(y *Yabs, name string, globs []string) string {
+func Fs(y *Yabs, name string, globs []string, exclude []string) string {
 	if len(globs) == 0 {
 		log.Fatalf("list of globs can't be empty")
 	}
@@ -27,12 +27,19 @@ func Fs(y *Yabs, name string, globs []string) string {
 					if strings.HasPrefix(path, ".yabs") {
 						return doublestar.SkipDir
 					}
+					for _, excludeStr := range exclude {
+						if ok, err := doublestar.Match(excludeStr, path); ok {
+							return nil
+						} else if err != nil {
+							return err
+						}
+					}
 					newname := filepath.Join(bc.Out, path)
 					if err := os.MkdirAll(filepath.Dir(newname), os.ModePerm); err != nil {
-						log.Fatalf("mkdir: %+v", err)
+						return err
 					}
 					if err := os.Link(path, newname); err != nil {
-						log.Fatalf("link error: %s", err)
+						return err
 					}
 				}
 				return nil
