@@ -70,7 +70,7 @@ jobs:
       #     user_name: github-actions[bot]
       #     user_email: 41898282+github-actions[bot]@users.noreply.github.com
       - name: Deploy to GitHub Pages
-        if: steps.build_docs.outputs.BUILD_DOCS == "true"
+        if: steps.build_docs.outputs.BUILD_DOCS == 'true'
         run: echo "Deploying to GitHub Pages!!"
 
       - name: prune
