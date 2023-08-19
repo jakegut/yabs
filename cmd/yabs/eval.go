@@ -41,8 +41,8 @@ import (
 func fsFunc(y *yabs.Yabs) object.BuiltinFunction {
 	// args: name string, fileGlobs []string
 	return func(ctx context.Context, args ...object.Object) object.Object {
-		if len(args) != 2 {
-			return object.NewArgsError("fs", 2, len(args))
+		if len(args) < 2 || len(args) > 3 {
+			return object.NewArgsRangeError("fs", 2, 3, len(args))
 		}
 		name, err := validateString(args[0])
 		if err != nil {
@@ -52,7 +52,15 @@ func fsFunc(y *yabs.Yabs) object.BuiltinFunction {
 		if err != nil {
 			object.NewError(err)
 		}
-		return object.NewString(yabs.Fs(y, name, globs))
+		exclude := []string{}
+		if len(args) == 3 {
+			var err error
+			exclude, err = validateList[string](args[2])
+			if err != nil {
+				object.NewError(err)
+			}
+		}
+		return object.NewString(yabs.Fs(y, name, globs, exclude))
 	}
 }
 

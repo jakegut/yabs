@@ -2,7 +2,7 @@ import gh
 
 go_tc := go("go1.20.7")
 
-// node_tc := node("v20.5.1")
+node_tc := node("v20.5.1")
 
 go_files := fs("go_files", ["go.mod", "go.sum", "**/*.go"])
 
@@ -94,26 +94,36 @@ register("test", [go_tc, "go_download", go_files], func(bc) {
     sh('go test ./...')
 })
 
-// register("npm_install", [node_tc], func(bc){
-//     os.mkdir_all(bc.Out + "/node_modules")
-//     sh("cd docs && npm install")
-// })
 
-// register("docs", ["npm_install"], func(bc) {
-//     sh('cd docs && npm start')
-// })
+docs_files := fs("docs_files", ["docs/**/*"], ["docs/node_modules/**/*", "docs/.docusaurus/**/*", "docs/build/*/**"])
 
-// register("docs_build", ["npm_install"], func(bc){
-//     sh('cd docs && npm run build')
-// })
+npm_i := [node_tc]
+if os.getenv("CI") == "true" {
+    npm_i.append(docs_files)
+}
 
-// register("node", [node_tc], func(bc) {
-//     sh('node --version')
-//     sh('which node')
-//     sh('npm --version')
-//     sh('which npm')
-// })
+register("npm_install", npm_i, func(bc){
+    arg := "install"
+    if os.getenv("CI") == "true" {
+        arg = "ci"
+    }
+    sh('cd docs && npm {arg}')
+})
 
-// register("npm_cache", [node_tc], func(bc) {
-//     sh('npm config get cache')
-// })
+register("docs", ["npm_install"], func(bc) {
+    sh('cd docs && npm start')
+})
+
+register("docs_build", ["npm_install", docs_files], func(bc){
+    if os.getenv("GITHUB_OUTPUT") != "" {
+        sh('echo "BUILD_DOCS=true" >> {os.getenv("GITHUB_OUTPUT")}')
+    }
+    sh('cd docs && npm run build')
+})
+
+register("node", [node_tc], func(bc) {
+    sh('node --version')
+    sh('which node')
+    sh('npm --version')
+    sh('which npm')
+})
