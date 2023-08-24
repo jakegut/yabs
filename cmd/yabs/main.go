@@ -47,9 +47,11 @@ func main() {
 		log.Fatalf("compiling: %s", err)
 	}
 
-	ctx = context.WithValue(ctx, vmFuncKey, newVMFunc(code, builtins))
+	vm := getVM(code, builtins)
 
-	if err = eval(ctx, code, builtins); err != nil {
+	ctx = context.WithValue(ctx, vmFuncKey, newVMFunc(vm))
+
+	if err = vm.Run(ctx); err != nil {
 		log.Fatalf("eval: %s", err)
 	}
 

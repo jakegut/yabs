@@ -158,21 +158,13 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 		if !ok {
 			return object.NewError(fmt.Errorf("wrong type for second arg, want=func(bc), got=%T", args[2]))
 		}
+
 		y.Register(target, deps, func(bc yabs.BuildCtx) {
 			newVM, ok := ctx.Value(vmFuncKey).(VmFunc)
 			if !ok {
 				log.Fatalf("vm not found")
 			}
 			machine := newVM()
-
-			if err := machine.Run(ctx); err != nil {
-				log.Fatal(err)
-			}
-
-			// callFunc, ok := object.GetCallFunc(ctx)
-			// if !ok {
-			// 	log.Fatalf("oof")
-			// }
 
 			bcProxy, err := object.NewProxy(&bc)
 			if err != nil {
@@ -181,7 +173,7 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 
 			ctx = context.WithValue(ctx, targetNameKey, target)
 
-			_, err = machine.CallFunction(ctx, taskFnObj, []object.Object{bcProxy})
+			_, err = machine.Call(ctx, taskFnObj, []object.Object{bcProxy})
 			if err != nil {
 				log.Fatalf("calling func for target %q: %s", target, err)
 			}
@@ -198,9 +190,13 @@ const targetNameKey = contextKey("yabs:targetname")
 
 type VmFunc func() *vm.VirtualMachine
 
-func newVMFunc(code *object.Code, builtins map[string]object.Object) VmFunc {
+func newVMFunc(parent *vm.VirtualMachine) VmFunc {
 	return func() *vm.VirtualMachine {
-		return getVM(code, builtins)
+		clone, err := parent.Clone()
+		if err != nil {
+			log.Fatalf("failed to clone vm: %s", err)
+		}
+		return clone
 	}
 }
 
@@ -252,7 +248,7 @@ func getBuiltins(bs *yabs.Yabs) map[string]object.Object {
 	return allBuiltins
 }
 
-func compile(ctx context.Context, source string, allBuiltins map[string]object.Object) (*object.Code, error) {
+func compile(ctx context.Context, source string, allBuiltins map[string]object.Object) (*compiler.Code, error) {
 
 	ast, err := parser.Parse(ctx, source)
 	if err != nil {
@@ -260,7 +256,7 @@ func compile(ctx context.Context, source string, allBuiltins map[string]object.O
 	}
 
 	compilerOpts := []compiler.Option{
-		compiler.WithBuiltins(allBuiltins),
+		compiler.WithGlobalNames(mapKeys(allBuiltins)),
 	}
 	comp, err := compiler.New(compilerOpts...)
 	if err != nil {
@@ -270,19 +266,30 @@ func compile(ctx context.Context, source string, allBuiltins map[string]object.O
 	return comp.Compile(ast)
 }
 
-func getVM(code *object.Code, builtins map[string]object.Object) *vm.VirtualMachine {
-	localImporter := importer.NewLocalImporter(importer.LocalImporterOptions{Extensions: []string{".yb", ".yabs"}, Builtins: builtins})
+func getVM(code *compiler.Code, globals map[string]object.Object) *vm.VirtualMachine {
+
+	globalNames := mapKeys(globals)
+	genericGlobals := map[string]any{}
+	for k, v := range globals {
+		genericGlobals[k] = v
+	}
+
+	localImporter := importer.NewLocalImporter(importer.LocalImporterOptions{
+		Extensions:  []string{".yb", ".yabs"},
+		GlobalNames: globalNames,
+	})
 
 	vmOpts := []vm.Option{
 		vm.WithImporter(localImporter),
+		vm.WithGlobals(genericGlobals),
 	}
-
 	return vm.New(code, vmOpts...)
 }
 
-func eval(ctx context.Context, code *object.Code, builtins map[string]object.Object) error {
-
-	machine := getVM(code, builtins)
-
-	return machine.Run(ctx)
+func mapKeys(m map[string]object.Object) []string {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
