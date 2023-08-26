@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/bmatcuk/doublestar/v4 v4.6.0
 	github.com/fatih/color v1.15.0
-	github.com/risor-io/risor/modules/uuid v0.0.0-20230825190526-b01ecbba5a54
+	github.com/risor-io/risor/modules/uuid v0.16.2
 	github.com/urfave/cli/v2 v2.25.7
 	golang.org/x/exp v0.0.0-20230725093048-515e97ebf090
 	golang.org/x/sync v0.3.0
@@ -22,5 +22,5 @@ require (
 
 require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
-	github.com/risor-io/risor v0.15.0
+	github.com/risor-io/risor v0.16.2
 )
