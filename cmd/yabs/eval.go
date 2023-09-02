@@ -12,6 +12,7 @@ import (
 
 	"github.com/jakegut/yabs"
 	"github.com/jakegut/yabs/prefixer"
+	"github.com/jakegut/yabs/task"
 	"github.com/jakegut/yabs/toolchain"
 	"github.com/risor-io/risor/builtins"
 	"github.com/risor-io/risor/compiler"
@@ -158,7 +159,7 @@ func registerFunc(y *yabs.Yabs) object.BuiltinFunction {
 		if !ok {
 			return object.NewError(fmt.Errorf("wrong type for second arg, want=func(bc), got=%T", args[2]))
 		}
-		y.Register(target, deps, func(bc yabs.BuildCtx) {
+		y.Register(target, deps, func(bc task.BuildCtx) {
 			newVM, ok := ctx.Value(vmFuncKey).(VmFunc)
 			if !ok {
 				log.Fatalf("vm not found")
@@ -252,7 +253,7 @@ func getBuiltins(bs *yabs.Yabs) map[string]object.Object {
 	return allBuiltins
 }
 
-func compile(ctx context.Context, source string, allBuiltins map[string]object.Object) (*object.Code, error) {
+func compile(ctx context.Context, source string, builtins map[string]object.Object) (*object.Code, error) {
 
 	ast, err := parser.Parse(ctx, source)
 	if err != nil {
@@ -260,7 +261,7 @@ func compile(ctx context.Context, source string, allBuiltins map[string]object.O
 	}
 
 	compilerOpts := []compiler.Option{
-		compiler.WithBuiltins(allBuiltins),
+		compiler.WithBuiltins(builtins),
 	}
 	comp, err := compiler.New(compilerOpts...)
 	if err != nil {

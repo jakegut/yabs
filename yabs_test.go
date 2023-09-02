@@ -3,6 +3,7 @@ package yabs
 import (
 	"testing"
 
+	"github.com/jakegut/yabs/task"
 	"golang.org/x/exp/slices"
 )
 
@@ -19,14 +20,14 @@ func TestGetTaskRecords(t *testing.T) {
 		{
 			name: "no-op target returns empty TaskRecord",
 			input: func(y *Yabs) {
-				y.Register("default", []string{}, func(bc BuildCtx) {})
+				y.Register("default", []string{}, func(bc task.BuildCtx) {})
 			},
 			final: []TaskRecord{},
 		},
 		{
 			name: "one target produces out, no task dep",
 			input: func(y *Yabs) {
-				y.Register("default", []string{}, func(bc BuildCtx) {
+				y.Register("default", []string{}, func(bc task.BuildCtx) {
 					if err := bc.Run("echo", "hi").StdoutToFile(bc.Out).Exec(); err != nil {
 						t.Fatal(err)
 					}
@@ -37,12 +38,12 @@ func TestGetTaskRecords(t *testing.T) {
 		{
 			name: "two targets",
 			input: func(y *Yabs) {
-				y.Register("echo", []string{}, func(bc BuildCtx) {
+				y.Register("echo", []string{}, func(bc task.BuildCtx) {
 					if err := bc.Run("echo", "hi").StdoutToFile(bc.Out).Exec(); err != nil {
 						t.Fatal(err)
 					}
 				})
-				y.Register("default", []string{"echo"}, func(bc BuildCtx) {})
+				y.Register("default", []string{"echo"}, func(bc task.BuildCtx) {})
 			},
 			final: []TaskRecord{{Name: "default", Deps: []string{"echo"}}, {Name: "echo", Checksum: hiChecksum}},
 		},

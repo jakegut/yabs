@@ -1,8 +1,6 @@
 package yabs
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,59 +9,14 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/jakegut/yabs/internal"
+	"github.com/jakegut/yabs/task"
 	"golang.org/x/exp/slices"
 )
-
-type RunConfig struct {
-	Cmd []string
-	env map[string]string
-	out string
-}
-
-func (r *RunConfig) WithEnv(key, value string) *RunConfig {
-	r.env[key] = value
-	return r
-}
-
-func (r *RunConfig) StdoutToFile(file string) *RunConfig {
-	r.out = file
-	return r
-}
-
-func (r *RunConfig) Exec() error {
-	fd := os.Stdout
-	if len(r.out) > 0 {
-		var err error
-		fd, err = os.Create(r.out)
-		if err != nil {
-			return fmt.Errorf("opening file: %s", err)
-		}
-		defer fd.Close()
-	}
-
-	cmd := exec.Command(r.Cmd[0], r.Cmd[1:]...)
-	cmd.Stdout = fd
-	cmd.Stderr = os.Stderr
-
-	env := os.Environ()
-	for k, v := range r.env {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
-	}
-	cmd.Env = env
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("cmd start: %s", err)
-	}
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("cmd wait: %s", err)
-	}
-	return nil
-}
 
 func getTmp(loc, prefix string) (string, error) {
 	try := 0
@@ -96,100 +49,6 @@ func (y *Yabs) newTmpOut() (string, error) {
 	return tmp, nil
 }
 
-func getFileChecksum(path string) ([]byte, error) {
-	st, err := os.Lstat(path)
-	if err != nil {
-		log.Fatalf("file checksum: %s", err)
-	}
-	if st.Mode()&fs.ModeSymlink != 0 {
-		lk, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			log.Fatalf("file checksum: %s", err)
-		}
-		return getFileChecksum(lk)
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("file checksum: %s", err)
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return nil, fmt.Errorf("file checksum: %s", err)
-	}
-
-	return h.Sum(nil), nil
-}
-
-func checksumFile(loc string) string {
-	sum, err := getFileChecksum(loc)
-
-	if err != nil {
-		log.Fatalf("checksum file: %s", err)
-	}
-
-	return hex.EncodeToString(sum)
-}
-
-func checksumDir(loc string) string {
-
-	hsh := sha256.New()
-
-	err := filepath.Walk(loc, func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		sum, err := getFileChecksum(path)
-		if err != nil {
-			return err
-		}
-
-		_, err = hsh.Write(sum)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		log.Fatalf("file walk: %s", err)
-	}
-
-	return hex.EncodeToString(hsh.Sum(nil))
-}
-
-type BuildCtx struct {
-	// Run func(name string, args ...string) *RunConfig
-	Out string
-	Dep map[string]string
-}
-
-func NewBuildCtx(out string) BuildCtx {
-	return BuildCtx{
-		Out: out,
-		Dep: map[string]string{},
-	}
-}
-
-func (BuildCtx) Run(name string, args ...string) *RunConfig {
-	return &RunConfig{
-		Cmd: append([]string{name}, args...),
-		env: map[string]string{},
-		out: "",
-	}
-}
-
-func (bc *BuildCtx) GetDep(name string) string {
-	return bc.Dep[name]
-}
-
 type TaskRecord struct {
 	Name     string
 	Checksum string
@@ -197,123 +56,13 @@ type TaskRecord struct {
 	Time     int64
 }
 
-type Task struct {
-	Name     string
-	Fn       BuildCtxFunc
-	Dep      []string
-	Out      string
-	Checksum string
-	Dirty    bool
-	Time     int64
-}
-
-type OutType int
-
-const (
-	None OutType = iota
-	File
-	Dir
-)
-
 func (y *Yabs) getCacheLoc(checksum string) string {
 	return filepath.Join(y.tmpDir, "cache", checksum[:2], checksum[2:])
 }
 
-func removeDir(path string) {
-	abs, _ := filepath.Abs(filepath.Join(".yabs", "out"))
-	if !strings.HasPrefix(path, abs) {
-		log.Fatalf("about to remove a non-out dir: %q", path)
-	}
-
-	if err := os.RemoveAll(path); err != nil {
-		log.Fatalf("remove dir: %s", err)
-	}
-}
-
-func (t *Task) cache(y *Yabs, outType OutType) {
-	loc := y.getCacheLoc(t.Checksum)
-	if err := os.MkdirAll(filepath.Dir(loc), os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("creating parent dir: %s", err)
-	}
-
-	_, err := os.Lstat(loc)
-	if err == nil {
-		return
-	}
-
-	if err = os.Symlink(t.Out, loc); err != nil {
-		log.Fatalf("creating link: %s", err)
-	}
-}
-
-func isEmptyDir(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-		log.Fatalf("isEmptyDir: %s", err)
-	}
-	defer f.Close()
-
-	_, err = f.Readdirnames(1)
-	return err == io.EOF
-}
-
-func (t *Task) checksumEntries(y *Yabs, ctx BuildCtx) {
-	outType := None
-	fd, err := os.Stat(t.Out)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("stat tmp out: %s", err)
-	} else if fd != nil {
-		if fd.IsDir() {
-			if isEmptyDir(t.Out) {
-				outType = None
-			} else {
-				outType = Dir
-			}
-		} else {
-			if fd.Size() == 0 {
-				outType = None
-			} else {
-				outType = File
-			}
-		}
-	}
-
-	checksum := ""
-
-	switch outType {
-	case File:
-		checksum = checksumFile(t.Out)
-	case Dir:
-		checksum = checksumDir(t.Out)
-	case None:
-		t.Out = ""
-		return
-	}
-
-	if checksum == t.Checksum {
-		t.Dirty = false
-		removeDir(t.Out)
-		out := y.getCacheLoc(t.Checksum)
-		lk, _ := os.Readlink(out)
-		t.Out = lk
-		return
-	} else {
-		t.Checksum = checksum
-	}
-
-	t.cache(y, outType)
-}
-
-type BuildCtxFunc func(BuildCtx)
-
-//
-
 type Yabs struct {
 	scheduler     *Scheduler
-	taskKV        map[string]*Task
+	taskKV        map[string]*task.Task
 	taskRecordLoc string
 	tmpDir        string
 	time          int64
@@ -353,7 +102,7 @@ func New() *Yabs {
 	}()
 	y := &Yabs{
 		scheduler:     NewScheduler(),
-		taskKV:        map[string]*Task{},
+		taskKV:        map[string]*task.Task{},
 		taskRecordLoc: filepath.Join(tmpDir, ".records.json"),
 		tmpDir:        tmpDir,
 	}
@@ -487,7 +236,7 @@ func (y *Yabs) Prune() {
 			log.Fatalf("prune: %s", err)
 		}
 		dir := filepath.Dir(path)
-		if isEmptyDir(filepath.Dir(path)) {
+		if internal.IsEmptyDir(filepath.Dir(path)) {
 			if err := os.Remove(dir); err != nil {
 				log.Fatalf("removing parent: %s", err)
 			}
@@ -495,14 +244,13 @@ func (y *Yabs) Prune() {
 	}
 }
 
-func (y *Yabs) Register(name string, deps []string, fn BuildCtxFunc) {
+func (y *Yabs) Register(name string, deps []string, fn task.BuildCtxFunc) {
 	if _, ok := y.taskKV[name]; ok {
 		return
 	}
 
 	slices.Sort(deps)
-	task := &Task{Dep: deps, Fn: fn, Name: name}
-	y.taskKV[name] = task
+	y.taskKV[name] = &task.Task{Dep: deps, Fn: fn, Name: name, GetCacheLoc: y.getCacheLoc}
 }
 
 func (y *Yabs) ExecWithDefault(def string) error {

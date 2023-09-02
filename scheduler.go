@@ -6,13 +6,14 @@ import (
 	"log"
 	"sync"
 
+	"github.com/jakegut/yabs/task"
 	"golang.org/x/sync/semaphore"
 )
 
 const POOL_SIZE = 5
 
 type Scheduler struct {
-	taskQueue map[string][]chan *Task
+	taskQueue map[string][]chan *task.Task
 	taskDone  map[string]bool
 	mu        *sync.Mutex
 	y         *Yabs
@@ -21,19 +22,19 @@ type Scheduler struct {
 
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		taskQueue: make(map[string][]chan *Task),
+		taskQueue: make(map[string][]chan *task.Task),
 		taskDone:  make(map[string]bool),
 		mu:        &sync.Mutex{},
 	}
 }
 
-func (s *Scheduler) execTask(t *Task) {
+func (s *Scheduler) execTask(t *task.Task) {
 	out, err := s.y.newTmpOut()
 	if err != nil {
 		log.Fatalf("creating tmp out: %s", err)
 	}
-	ctx := NewBuildCtx(out)
-	tasks := []<-chan *Task{}
+	ctx := task.NewBuildCtx(out)
+	tasks := []<-chan *task.Task{}
 	for _, dep := range t.Dep {
 		if task, ok := s.y.taskKV[dep]; ok {
 			tasks = append(tasks, s.Schedule(task))
@@ -63,7 +64,9 @@ func (s *Scheduler) execTask(t *Task) {
 		t.Fn(ctx)
 		s.sema.Release(1)
 		t.Out = ctx.Out
-		t.checksumEntries(s.y, ctx)
+		if err := t.ChecksumEntries(); err != nil {
+			log.Fatalf("checksum entries: %s", err)
+		}
 	} else {
 		log.Printf("no actions for %q", t.Name)
 	}
@@ -76,11 +79,11 @@ func (s *Scheduler) execTask(t *Task) {
 	s.taskDone[t.Name] = true
 }
 
-func (s *Scheduler) Schedule(t *Task) chan *Task {
+func (s *Scheduler) Schedule(t *task.Task) chan *task.Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ch := make(chan *Task, 1)
+	ch := make(chan *task.Task, 1)
 	if s.taskDone[t.Name] {
 		ch <- t
 		return ch
@@ -89,7 +92,7 @@ func (s *Scheduler) Schedule(t *Task) chan *Task {
 	if _, ok := s.taskQueue[t.Name]; ok {
 		s.taskQueue[t.Name] = append(s.taskQueue[t.Name], ch)
 	} else {
-		s.taskQueue[t.Name] = make([]chan *Task, 1)
+		s.taskQueue[t.Name] = make([]chan *task.Task, 1)
 		s.taskQueue[t.Name][0] = ch
 		go s.execTask(t)
 	}

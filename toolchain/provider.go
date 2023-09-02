@@ -16,6 +16,7 @@ import (
 	"runtime"
 
 	"github.com/jakegut/yabs"
+	"github.com/jakegut/yabs/task"
 )
 
 type ToolchainProvider struct {
@@ -41,7 +42,7 @@ func (tp ToolchainProvider) GetTargetName() string {
 
 func (tp ToolchainProvider) Register(y *yabs.Yabs) {
 	name := tp.GetTargetName()
-	y.Register(name, []string{}, func(bc yabs.BuildCtx) {
+	y.Register(name, []string{}, func(bc task.BuildCtx) {
 		if err := tp.Download(); err != nil {
 			log.Fatal(err)
 		}
